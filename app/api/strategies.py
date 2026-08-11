@@ -1,4 +1,3 @@
-# app/api/strategies.py
 """
 策略配置 API
 提供策略配置的查询、更新和预览接口
@@ -7,17 +6,25 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
+from app.repositories.price_repository import PriceRepository
+from app.repositories.grid_strategy_repository import GridStrategyRepository
 from app.schemas.strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
     StrategyPreviewRequest,
     StrategyPreviewResponse,
+    PriceConfigResponse,
+    PriceConfigUpdate,
+    GridStrategyConfigResponse,
+    GridStrategyConfigUpdate,
 )
 from app.services.strategy_service import StrategyService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 
+
+# ============ 策略配置 API ============
 
 @router.get("/config", response_model=StrategyConfigResponse)
 async def get_strategy_config(request: Request):
@@ -52,7 +59,6 @@ async def update_strategy_config(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        # B-RC2-03: 记录完整错误到日志，不暴露给前端
         logger.exception("更新策略配置失败")
         raise HTTPException(
             status_code=500,
@@ -74,9 +80,84 @@ async def preview_strategy(
             service = StrategyService(db)
             return service.preview_decision(preview_data)
     except Exception as e:
-        # B-RC2-03: 记录完整错误到日志，不暴露给前端
         logger.exception("策略预览失败")
         raise HTTPException(
             status_code=500,
             detail="策略预览失败，请检查输入或服务器日志。",
+        )
+
+
+# ============ 电价配置 API（B-03） ============
+
+@router.get("/price-config", response_model=PriceConfigResponse)
+async def get_price_config(request: Request):
+    """
+    获取当前电价配置
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        repo = PriceRepository(db)
+        return repo.get_config()
+
+
+@router.put("/price-config", response_model=PriceConfigResponse)
+async def update_price_config(
+    request: Request,
+    update_data: PriceConfigUpdate,
+):
+    """
+    更新电价配置（支持部分更新）
+    """
+    try:
+        database = request.app.state.database
+        with database.session() as db:
+            repo = PriceRepository(db)
+            return repo.update_config(
+                valley_price=update_data.valley_price,
+                flat_price=update_data.flat_price,
+                peak_price=update_data.peak_price,
+            )
+    except Exception as e:
+        logger.exception("更新电价配置失败")
+        raise HTTPException(
+            status_code=500,
+            detail="电价配置保存失败，请检查服务器日志。",
+        )
+
+
+# ============ 电网策略配置 API（B-04） ============
+
+@router.get("/grid-config", response_model=GridStrategyConfigResponse)
+async def get_grid_config(request: Request):
+    """
+    获取当前电网策略配置
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        repo = GridStrategyRepository(db)
+        return repo.get_config()
+
+
+@router.put("/grid-config", response_model=GridStrategyConfigResponse)
+async def update_grid_config(
+    request: Request,
+    update_data: GridStrategyConfigUpdate,
+):
+    """
+    更新电网策略配置（支持部分更新）
+    """
+    try:
+        database = request.app.state.database
+        with database.session() as db:
+            repo = GridStrategyRepository(db)
+            return repo.update_config(
+                max_import_power_kw=update_data.max_import_power_kw,
+                allow_export=update_data.allow_export,
+                max_export_power_kw=update_data.max_export_power_kw,
+            )
+    except Exception as e:
+        logger.exception("更新电网策略配置失败")
+        raise HTTPException(
+            status_code=500,
+            detail="电网策略配置保存失败，请检查服务器日志。",
         )

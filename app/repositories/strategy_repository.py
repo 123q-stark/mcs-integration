@@ -1,4 +1,3 @@
-# app/repositories/strategy_repository.py
 """
 策略配置 Repository
 负责策略配置的数据访问和默认初始化
@@ -38,6 +37,10 @@ class StrategyRepository:
             soc_max: float,
             charge_power_kw: float,
             discharge_power_kw: float,
+            # ===== 新增参数（B-01） =====
+            requested_mode: str = "AUTO",
+            backup_soc_target: float = 50.0,
+            # ============================
             is_active: bool = True,
     ) -> StrategyConfigModel:
         """
@@ -61,6 +64,10 @@ class StrategyRepository:
                 soc_max=soc_max,
                 charge_power_kw=charge_power_kw,
                 discharge_power_kw=discharge_power_kw,
+                # ===== 新增字段赋值 =====
+                requested_mode=requested_mode,
+                backup_soc_target=backup_soc_target,
+                # ==========================
                 is_active=is_active,
             )
             self.db.add(config)
@@ -71,6 +78,10 @@ class StrategyRepository:
             config.soc_max = soc_max
             config.charge_power_kw = charge_power_kw
             config.discharge_power_kw = discharge_power_kw
+            # ===== 新增字段赋值 =====
+            config.requested_mode = requested_mode
+            config.backup_soc_target = backup_soc_target
+            # ==========================
             config.is_active = is_active
 
         self.db.flush()
@@ -93,6 +104,10 @@ class StrategyRepository:
             soc_max=90.0,
             charge_power_kw=10.0,
             discharge_power_kw=10.0,
+            # ===== 新增字段默认值（B-01） =====
+            requested_mode="AUTO",
+            backup_soc_target=50.0,
+            # ================================
             is_active=True,
         )
         self.db.add(default_config)
