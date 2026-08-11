@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.repositories.price_repository import PriceRepository
 from app.repositories.grid_strategy_repository import GridStrategyRepository
+from app.repositories.strategy_device_repository import StrategyDeviceRepository  # 新增导入
 from app.schemas.strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
@@ -161,3 +162,75 @@ async def update_grid_config(
             status_code=500,
             detail="电网策略配置保存失败，请检查服务器日志。",
         )
+
+
+# ============ 设备策略配置 API（B-02） ============
+
+@router.get("/device-configs")
+async def get_device_configs(request: Request):
+    """
+    获取所有设备的策略配置（10条：PV001~PV005, CHG001~CHG005）
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        repo = StrategyDeviceRepository(db)
+        configs = repo.get_all()
+        return [
+            {
+                "device_code": c.device_code,
+                "participate_in_strategy": c.participate_in_strategy,
+                "allow_strategy_control": c.allow_strategy_control,
+                "strategy_power_limit_kw": c.strategy_power_limit_kw,
+                "priority": c.priority,
+            }
+            for c in configs
+        ]
+
+
+@router.get("/device-configs/{device_code}")
+async def get_device_config(request: Request, device_code: str):
+    """
+    获取单个设备的策略配置
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        repo = StrategyDeviceRepository(db)
+        config = repo.get_by_device_code(device_code)
+        if config is None:
+            raise HTTPException(status_code=404, detail="设备策略配置不存在")
+        return {
+            "device_code": config.device_code,
+            "participate_in_strategy": config.participate_in_strategy,
+            "allow_strategy_control": config.allow_strategy_control,
+            "strategy_power_limit_kw": config.strategy_power_limit_kw,
+            "priority": config.priority,
+        }
+
+
+@router.put("/device-configs/{device_code}")
+async def update_device_config(
+    request: Request,
+    device_code: str,
+    update_data: dict,
+):
+    """
+    更新单个设备的策略配置
+    支持部分更新，可传入以下字段：
+        participate_in_strategy (bool)
+        allow_strategy_control (bool)
+        strategy_power_limit_kw (float, optional)
+        priority (int)
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        repo = StrategyDeviceRepository(db)
+        config = repo.update(device_code, update_data)
+        if config is None:
+            raise HTTPException(status_code=404, detail="设备策略配置不存在")
+        return {
+            "device_code": config.device_code,
+            "participate_in_strategy": config.participate_in_strategy,
+            "allow_strategy_control": config.allow_strategy_control,
+            "strategy_power_limit_kw": config.strategy_power_limit_kw,
+            "priority": config.priority,
+        }
