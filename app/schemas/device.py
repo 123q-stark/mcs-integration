@@ -35,3 +35,11 @@ class DeviceStatusResponse(BaseModel):
     power_kw: float
     storage_soc: Optional[float] = None
     updated_at: datetime
+
+    # ===== A-02 新增字段 =====
+    voltage_v: Optional[float] = None
+    current_a: Optional[float] = None
+    temperature_c: Optional[float] = None
+    energy_kwh: Optional[float] = None
+    quality: str = "good"  # good / stale / invalid / communication_error
+    status: Optional[str] = None  # 充电桩专用：idle / charging / disabled / fault

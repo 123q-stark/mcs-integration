@@ -39,11 +39,11 @@ def test_create_device(db_session):
 
 
 def test_unique_device_code(db_session):
-    d1 = Device(device_code="ESS001", device_name="储能1", device_type="storage")
+    d1 = Device(device_code="BATT001", device_name="储能电池", device_type="battery")
     db_session.add(d1)
     db_session.commit()
 
-    d2 = Device(device_code="ESS001", device_name="储能2", device_type="storage")
+    d2 = Device(device_code="BATT001", device_name="储能电池2", device_type="battery")
     db_session.add(d2)
     with pytest.raises(Exception):
         db_session.commit()
@@ -70,6 +70,7 @@ def test_rated_power_nullable(db_session):
     db_session.commit()
     result = db_session.query(Device).filter_by(device_code="NULLPWR").first()
     assert result.rated_power_kw is None
+
 # ==================== A-02: Schema 测试 ====================
 
 from datetime import datetime
@@ -130,8 +131,8 @@ def test_device_status_response_with_soc():
     """测试 DeviceStatusResponse 正常创建（储能设备）"""
     data = {
         "device_id": 2,
-        "device_code": "ESS001",
-        "device_type": "storage",
+        "device_code": "BATT001",
+        "device_type": "battery",
         "is_online": True,
         "power_kw": -10.0,
         "storage_soc": 65.5,
@@ -147,30 +148,39 @@ from app.repositories.device_repository import DeviceRepository
 
 
 def test_ensure_default_devices(db_session):
-    """第一次初始化生成三条设备"""
+    """第一次初始化生成12条设备"""
     repo = DeviceRepository(db_session)
     devices = repo.ensure_default_devices()
 
-    assert len(devices) == 3
+    assert len(devices) == 12
     codes = [d.device_code for d in devices]
+    # 验证 5 路 PV
     assert "PV001" in codes
-    assert "ESS001" in codes
+    assert "PV002" in codes
+    assert "PV003" in codes
+    assert "PV004" in codes
+    assert "PV005" in codes
+    # 验证 5 个充电桩
     assert "CHG001" in codes
+    assert "CHG002" in codes
+    assert "CHG003" in codes
+    assert "CHG004" in codes
+    assert "CHG005" in codes
+    # 验证储能和电网
+    assert "BATT001" in codes
+    assert "GRID001" in codes
 
 
 def test_ensure_default_devices_idempotent(db_session):
-    """第二次初始化仍为三条（幂等）"""
+    """第二次初始化仍为12条（幂等）"""
     repo = DeviceRepository(db_session)
-    # 第一次
     devices1 = repo.ensure_default_devices()
-    # 第二次
     devices2 = repo.ensure_default_devices()
 
-    assert len(devices1) == 3
-    assert len(devices2) == 3
-    # 数据库里应该只有 3 条记录
+    assert len(devices1) == 12
+    assert len(devices2) == 12
     all_devices = repo.list_devices()
-    assert len(all_devices) == 3
+    assert len(all_devices) == 12
 
 
 def test_get_by_id(db_session):
@@ -188,9 +198,9 @@ def test_get_by_code(db_session):
     repo = DeviceRepository(db_session)
     repo.ensure_default_devices()
 
-    device = repo.get_by_code("ESS001")
+    device = repo.get_by_code("BATT001")
     assert device is not None
-    assert device.device_name == "模拟储能"
+    assert device.device_name == "储能电池"
 
 
 def test_list_devices_by_type(db_session):
@@ -199,12 +209,24 @@ def test_list_devices_by_type(db_session):
     repo.ensure_default_devices()
 
     pv_devices = repo.list_devices(device_type="pv")
-    assert len(pv_devices) == 1
-    assert pv_devices[0].device_code == "PV001"
+    assert len(pv_devices) == 5
+    codes = [d.device_code for d in pv_devices]
+    assert "PV001" in codes
+    assert "PV005" in codes
 
-    storage_devices = repo.list_devices(device_type="storage")
-    assert len(storage_devices) == 1
-    assert storage_devices[0].device_code == "ESS001"
+    charger_devices = repo.list_devices(device_type="charger")
+    assert len(charger_devices) == 5
+    codes = [d.device_code for d in charger_devices]
+    assert "CHG001" in codes
+    assert "CHG005" in codes
+
+    battery_devices = repo.list_devices(device_type="battery")
+    assert len(battery_devices) == 1
+    assert battery_devices[0].device_code == "BATT001"
+
+    grid_devices = repo.list_devices(device_type="grid")
+    assert len(grid_devices) == 1
+    assert grid_devices[0].device_code == "GRID001"
 
 
 def test_get_nonexistent_device(db_session):
@@ -234,7 +256,7 @@ def test_get_devices(db_session):
     service = DeviceService(repo)
     devices = service.get_devices()
 
-    assert len(devices) == 3
+    assert len(devices) == 12
     assert devices[0].device_code == "PV001"
     assert devices[0].device_type == "pv"
 
@@ -246,13 +268,16 @@ def test_get_devices_by_type(db_session):
 
     service = DeviceService(repo)
     pv_devices = service.get_devices(device_type="pv")
-
-    assert len(pv_devices) == 1
+    assert len(pv_devices) == 5
     assert pv_devices[0].device_code == "PV001"
 
-    storage_devices = service.get_devices(device_type="storage")
-    assert len(storage_devices) == 1
-    assert storage_devices[0].device_code == "ESS001"
+    charger_devices = service.get_devices(device_type="charger")
+    assert len(charger_devices) == 5
+    assert charger_devices[0].device_code == "CHG001"
+
+    battery_devices = service.get_devices(device_type="battery")
+    assert len(battery_devices) == 1
+    assert battery_devices[0].device_code == "BATT001"
 
 
 def test_get_device_detail(db_session):
@@ -265,7 +290,7 @@ def test_get_device_detail(db_session):
 
     assert device.id == 1
     assert device.device_code == "PV001"
-    assert device.device_name == "模拟光伏"
+    assert device.device_name == "模拟光伏 #1"
     assert device.created_at is not None
 
 
@@ -315,7 +340,7 @@ def test_api_list_devices(tmp_path):
     response = client.get("/api/devices")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    assert len(data) == 12
     assert data[0]["device_code"] == "PV001"
 
 
@@ -344,7 +369,7 @@ def test_api_list_devices_by_type(tmp_path):
     response = client.get("/api/devices?device_type=pv")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    assert len(data) == 5
     assert data[0]["device_code"] == "PV001"
 
 
@@ -447,9 +472,10 @@ def test_device_status_storage(db_session):
         storage_power=-10.0,
         storage_soc=75.5,
     )
-    status = service.get_device_status(2, state)
-    assert status.device_code == "ESS001"
-    assert status.device_type == "storage"
+    # BATT001 的 ID 是 11
+    status = service.get_device_status(11, state)
+    assert status.device_code == "BATT001"
+    assert status.device_type == "battery"
     assert status.power_kw == -10.0
     assert status.storage_soc == 75.5
 
@@ -468,7 +494,8 @@ def test_device_status_charger(db_session):
         storage_power=5.0,
         storage_soc=60.0,
     )
-    status = service.get_device_status(3, state)
+    # CHG001 的 ID 是 6
+    status = service.get_device_status(6, state)
     assert status.device_code == "CHG001"
     assert status.device_type == "charger"
     assert status.power_kw == 30.0
@@ -491,6 +518,7 @@ def test_device_status_not_found(db_session):
     )
     with pytest.raises(DeviceNotFoundError):
         service.get_device_status(999, state)
+
 # ==================== A-07: 页面测试 ====================
 
 # ==================== A-RC2-03: 修正页面测试 ====================

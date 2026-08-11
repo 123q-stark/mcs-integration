@@ -31,9 +31,22 @@ class DeviceRepository:
         返回所有默认设备列表。
         """
         default_devices = [
-            {"device_code": "PV001", "device_name": "模拟光伏", "device_type": "pv"},
-            {"device_code": "ESS001", "device_name": "模拟储能", "device_type": "storage"},
-            {"device_code": "CHG001", "device_name": "模拟充电负载", "device_type": "charger"},
+            # 5 路光伏
+            {"device_code": "PV001", "device_name": "模拟光伏 #1", "device_type": "pv"},
+            {"device_code": "PV002", "device_name": "模拟光伏 #2", "device_type": "pv"},
+            {"device_code": "PV003", "device_name": "模拟光伏 #3", "device_type": "pv"},
+            {"device_code": "PV004", "device_name": "模拟光伏 #4", "device_type": "pv"},
+            {"device_code": "PV005", "device_name": "模拟光伏 #5", "device_type": "pv"},
+            # 5 个充电桩
+            {"device_code": "CHG001", "device_name": "充电桩 #1", "device_type": "charger"},
+            {"device_code": "CHG002", "device_name": "充电桩 #2", "device_type": "charger"},
+            {"device_code": "CHG003", "device_name": "充电桩 #3", "device_type": "charger"},
+            {"device_code": "CHG004", "device_name": "充电桩 #4", "device_type": "charger"},
+            {"device_code": "CHG005", "device_name": "充电桩 #5", "device_type": "charger"},
+            # 储能电池
+            {"device_code": "BATT001", "device_name": "储能电池", "device_type": "battery"},
+            # 电网
+            {"device_code": "GRID001", "device_name": "电网接入", "device_type": "grid"},
         ]
 
         created = []

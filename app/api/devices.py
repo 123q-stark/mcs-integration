@@ -127,3 +127,25 @@ def get_device_history(
             for r in records
         ]
     }
+
+
+# ==================== A-05: 系统实时状态接口 ====================
+from app.schemas.common import SystemState
+
+
+@router.get("/runtime/system-state", response_model=SystemState)
+def get_system_state(
+    request: Request,
+):
+    """
+    获取完整系统实时状态
+    包含 5 路 PV、5 个充电桩、Battery、Grid 的详细状态
+    """
+    try:
+        ems_service = request.app.state.service
+        return ems_service.get_system_state()
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="系统尚未初始化，请稍后重试。",
+        )

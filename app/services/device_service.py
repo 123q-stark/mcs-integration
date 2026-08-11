@@ -59,7 +59,7 @@ class DeviceService:
         if device.device_type == "pv":
             power_kw = state.pv_power
             storage_soc = None
-        elif device.device_type == "storage":
+        elif device.device_type in ("storage", "battery"):
             power_kw = state.storage_power
             storage_soc = state.storage_soc
         elif device.device_type == "charger":
