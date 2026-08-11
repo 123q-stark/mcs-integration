@@ -87,3 +87,42 @@ class StrategyPreviewResponse(BaseModel):
     action: str = Field(..., description="动作: charge/discharge/idle")
     message: str = Field(..., description="策略判断说明")
     created_at: datetime = Field(..., description="决策时间")
+
+# ============ 电价配置 Schema ============
+
+class PriceConfigResponse(BaseModel):
+    """电价配置响应模型"""
+    id: int
+    valley_price: float
+    flat_price: float
+    peak_price: float
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PriceConfigUpdate(BaseModel):
+    """电价配置更新请求模型"""
+    valley_price: float | None = Field(None, ge=0, description="谷价 (CNY/kWh)")
+    flat_price: float | None = Field(None, ge=0, description="平价 (CNY/kWh)")
+    peak_price: float | None = Field(None, ge=0, description="峰价 (CNY/kWh)")
+
+
+# ============ 电价配置 Schema ============
+
+class PriceConfigResponse(BaseModel):
+    """电价配置响应模型"""
+    id: int
+    valley_price: float
+    flat_price: float
+    peak_price: float
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PriceConfigUpdate(BaseModel):
+    """电价配置更新请求模型"""
+    valley_price: float | None = Field(None, ge=0, description="谷价 (CNY/kWh)")
+    flat_price: float | None = Field(None, ge=0, description="平价 (CNY/kWh)")
+    peak_price: float | None = Field(None, ge=0, description="峰价 (CNY/kWh)")
