@@ -1,4 +1,3 @@
-# tests/test_strategy.py
 """
 策略模块测试
 """
@@ -95,6 +94,8 @@ def test_strategy_config_update_valid():
         "charge_power_kw": 10.0,
         "discharge_power_kw": 10.0,
         "is_active": True,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     }
     config = StrategyConfigUpdate(**data)
     assert config.soc_min == 20.0
@@ -109,6 +110,8 @@ def test_strategy_config_update_soc_equal():
         "soc_max": 50.0,
         "charge_power_kw": 10.0,
         "discharge_power_kw": 10.0,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     }
     with pytest.raises(ValueError):
         StrategyConfigUpdate(**data)
@@ -122,6 +125,8 @@ def test_strategy_config_update_soc_min_greater():
         "soc_max": 80.0,
         "charge_power_kw": 10.0,
         "discharge_power_kw": 10.0,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     }
     with pytest.raises(ValueError):
         StrategyConfigUpdate(**data)
@@ -135,6 +140,8 @@ def test_strategy_config_update_soc_out_of_range():
         "soc_max": 110.0,
         "charge_power_kw": 10.0,
         "discharge_power_kw": 10.0,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     }
     with pytest.raises(ValueError):
         StrategyConfigUpdate(**data)
@@ -148,6 +155,8 @@ def test_strategy_config_update_power_zero():
         "soc_max": 90.0,
         "charge_power_kw": 0.0,
         "discharge_power_kw": 10.0,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     }
     with pytest.raises(ValueError):
         StrategyConfigUpdate(**data)
@@ -296,6 +305,8 @@ def test_strategy_charge_scenario():
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     decision = strategy.calculate(state, config)
@@ -323,6 +334,8 @@ def test_strategy_discharge_scenario():
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     decision = strategy.calculate(state, config)
@@ -350,6 +363,8 @@ def test_strategy_charge_soc_high_idle():
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     decision = strategy.calculate(state, config)
@@ -377,6 +392,8 @@ def test_strategy_discharge_soc_low_idle():
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     decision = strategy.calculate(state, config)
@@ -404,6 +421,8 @@ def test_strategy_with_custom_config():
         charge_power_kw=5.0,
         discharge_power_kw=5.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     decision = strategy.calculate(state, config)
@@ -422,6 +441,8 @@ def test_strategy_power_direction():
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     # 充电场景
@@ -508,6 +529,8 @@ def test_service_update_current_config(db_session):
         charge_power_kw=8.0,
         discharge_power_kw=8.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
 
     new_config = service.update_current_config(update_data)
@@ -587,6 +610,8 @@ def test_service_preview_uses_active_config(db_session):
         charge_power_kw=5.0,
         discharge_power_kw=5.0,
         is_active=True,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
     service.update_current_config(update_data)
 
@@ -691,6 +716,8 @@ def test_api_update_config():
             "charge_power_kw": 8.0,
             "discharge_power_kw": 8.0,
             "is_active": True,
+            "requested_mode": "AUTO",
+            "backup_soc_target": 50.0,
         }
         response = client.put("/api/strategies/config", json=update_data)
         assert response.status_code == 200
@@ -742,6 +769,8 @@ def test_api_update_config_invalid():
             "charge_power_kw": 10.0,
             "discharge_power_kw": 10.0,
             "is_active": True,
+            "requested_mode": "AUTO",
+            "backup_soc_target": 50.0,
         }
         response = client.put("/api/strategies/config", json=update_data)
         assert response.status_code == 422
@@ -968,6 +997,8 @@ def test_strategy_page():
             os.unlink(db_path)
         except PermissionError:
             pass
+
+
 # ==================== B-RC2-01: 策略重复保存测试 ====================
 
 def test_update_active_config_idempotent(db_session):
@@ -1058,6 +1089,8 @@ def test_strategy_power_limit_schema():
         soc_max=90.0,
         charge_power_kw=10.0,
         discharge_power_kw=10.0,
+        requested_mode="AUTO",
+        backup_soc_target=50.0,
     )
     assert valid.charge_power_kw == 10.0
 
@@ -1069,6 +1102,8 @@ def test_strategy_power_limit_schema():
             soc_max=90.0,
             charge_power_kw=10.1,
             discharge_power_kw=10.0,
+            requested_mode="AUTO",
+            backup_soc_target=50.0,
         )
 
     # 0 非法
@@ -1079,6 +1114,8 @@ def test_strategy_power_limit_schema():
             soc_max=90.0,
             charge_power_kw=0.0,
             discharge_power_kw=10.0,
+            requested_mode="AUTO",
+            backup_soc_target=50.0,
         )
 
 
@@ -1113,6 +1150,8 @@ def test_strategy_api_error_hides_sql_details(tmp_path):
         "charge_power_kw": 10.1,
         "discharge_power_kw": 10.0,
         "is_active": True,
+        "requested_mode": "AUTO",
+        "backup_soc_target": 50.0,
     })
 
     # 422 是 Pydantic 校验错误，不包含 SQL 信息
