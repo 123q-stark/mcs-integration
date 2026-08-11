@@ -1,4 +1,3 @@
-# app/schemas/__init__.py
 from .common import (
     SystemState,
     ControlDecision,
@@ -7,11 +6,17 @@ from .common import (
     CommandItem,
     ResetResponse,
 )
-from .strategy import (  # 新增
+from .strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
     StrategyPreviewRequest,
     StrategyPreviewResponse,
+)
+from .device_runtime import DeviceRuntimeState  # ← 需要添加
+from .device import (  # ← 如果 device.py 也有新内容需要导出
+    DeviceSummary,
+    DeviceDetail,
+    DeviceStatusResponse,
 )
 
 __all__ = [
@@ -21,8 +26,12 @@ __all__ = [
     "HistoryItem",
     "CommandItem",
     "ResetResponse",
-    "StrategyConfigResponse",  # 新增
-    "StrategyConfigUpdate",    # 新增
-    "StrategyPreviewRequest",  # 新增
-    "StrategyPreviewResponse", # 新增
+    "StrategyConfigResponse",
+    "StrategyConfigUpdate",
+    "StrategyPreviewRequest",
+    "StrategyPreviewResponse",
+    "DeviceRuntimeState",  # ← 需要添加
+    "DeviceSummary",       # ← 建议一并补充
+    "DeviceDetail",        # ← 建议一并补充
+    "DeviceStatusResponse",# ← 建议一并补充
 ]

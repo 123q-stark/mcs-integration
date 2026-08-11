@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SystemState(BaseModel):
     """设备层向策略层提供的统一系统状态。"""
 
+    # ===== v1.0 兼容字段 =====
     timestamp: datetime
     simulated_hour: float
     pv_power: float
     load_power: float
     storage_power: float
     storage_soc: float
+
+    # ===== v1.1 扩展字段 =====
+    grid_power: float = 0.0
+    pv_units: list = Field(default_factory=list)
+    chargers: list = Field(default_factory=list)
+    battery: Optional[dict] = None
+    grid: Optional[dict] = None
 
 
 class ControlDecision(BaseModel):

@@ -187,7 +187,7 @@ class SimulatorAdapter(DeviceAdapter):
             self._grid.current_a = round(abs(self._grid.power_kw) / self._grid.voltage_v * 1000, 2)
 
     def _update_aggregate_state(self) -> None:
-        """更新聚合 SystemState"""
+        """更新聚合 SystemState（包含扩展字段）"""
         pv_total = sum(pv.power_kw for pv in self._pv_units)
         load_total = sum(c.power_kw for c in self._chargers)
         battery_power = self._battery.power_kw
@@ -201,6 +201,11 @@ class SimulatorAdapter(DeviceAdapter):
             load_power=round(load_total, 2),
             storage_power=round(battery_power, 2),
             storage_soc=round(battery_soc, 2),
+            grid_power=round(grid_power, 2),
+            pv_units=[pv.model_copy(deep=True) for pv in self._pv_units],
+            chargers=[c.model_copy(deep=True) for c in self._chargers],
+            battery=self._battery.model_dump(),  # ← 转为字典
+            grid=self._grid.model_dump(),        # ← 转为字典
         )
 
     def _next_environment(self) -> None:
