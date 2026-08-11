@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}策略配置 - 光储充管理系统{% endblock %}
+
+{% block content %}
+<style>
+    .config-panel {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .config-form {
+        background: #f5f7fa;
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .form-group {
+        margin-bottom: 16px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+        color: #333;
+    }
+    .form-group input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    .form-group input:focus {
+        outline: none;
+        border-color: #4f8cf7;
+        box-shadow: 0 0 0 3px rgba(79, 140, 247, 0.1);
+    }
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    .btn {
+        padding: 10px 24px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-primary {
+        background: #4f8cf7;
+        color: white;
+    }
+    .btn-primary:hover {
+        background: #3a7ae8;
+    }
+    .btn-success {
+        background: #10b981;
+        color: white;
+    }
+    .btn-success:hover {
+        background: #059669;
+    }
+    .btn-warning {
+        background: #f59e0b;
+        color: white;
+    }
+    .btn-warning:hover {
+        background: #d97706;
+    }
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .button-group {
+        display: flex;
+        gap: 12px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+    .preview-panel {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 24px;
+        margin-top: 24px;
+    }
+    .preview-panel h3 {
+        margin-top: 0;
+        color: #1f2937;
+    }
+    .preview-result {
+        background: #f9fafb;
+        padding: 16px;
+        border-radius: 6px;
+        margin-top: 12px;
+    }
+    .preview-result .action-tag {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .action-tag.charge {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .action-tag.discharge {
+        background: #fce4ec;
+        color: #dc2626;
+    }
+    .action-tag.idle {
+        background: #e5e7eb;
+        color: #4b5563;
+    }
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 6px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+    }
+    .toast.success {
+        background: #10b981;
+    }
+    .toast.error {
+        background: #ef4444;
+    }
+    .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+    .status-text {
+        font-size: 14px;
+        color: #6b7280;
+        margin-top: 8px;
+    }
+    .status-text .active {
+        color: #10b981;
+        font-weight: 600;
+    }
+    .header {
+        margin-bottom: 20px;
+    }
+    .header h1 {
+        margin-bottom: 4px;
+    }
+    .header p {
+        color: #6b7280;
+        margin-top: 0;
+    }
+</style>
+
+<div class="container">
+    <div class="header">
+        <h1>⚙️ 策略配置</h1>
+        <p>配置储能充放电策略参数，实时预览决策结果</p>
+    </div>
+
+    <div class="config-panel">
+        <!-- 配置表单 -->
+        <div class="config-form">
+            <h2>当前策略配置</h2>
+            <div id="config-status" class="status-text">加载中...</div>
+
+            <form id="strategy-form">
+                <div class="form-group">
+                    <label for="config-name">配置名称</label>
+                    <input type="text" id="config-name" placeholder="请输入配置名称" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="soc-min">SOC 下限 (%)</label>
+                        <input type="number" id="soc-min" min="0" max="100" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="soc-max">SOC 上限 (%)</label>
+                        <input type="number" id="soc-max" min="0" max="100" step="0.1" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="charge-power">充电功率 (kW)</label>
+                        <input type="number" id="charge-power" min="0.1" max="10" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="discharge-power">放电功率 (kW)</label>
+                        <input type="number" id="discharge-power" min="0.1" max="10" step="0.1" required>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary" id="save-btn">💾 保存配置</button>
+                    <button type="button" class="btn btn-warning" id="load-btn">📥 加载当前配置</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 预览面板 -->
+        <div class="preview-panel">
+            <h3>🔮 策略预览</h3>
+            <p style="color: #6b7280; font-size: 14px;">输入模拟状态，查看当前策略会做出什么决策</p>
+
+            <form id="preview-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pv-power">光伏功率 (kW)</label>
+                        <input type="number" id="pv-power" value="40" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="load-power">负载功率 (kW)</label>
+                        <input type="number" id="load-power" value="30" step="0.1">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="storage-power">储能功率 (kW)</label>
+                        <input type="number" id="storage-power" value="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="storage-soc">储能 SOC (%)</label>
+                        <input type="number" id="storage-soc" value="50" min="0" max="100" step="0.1">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-success" id="preview-btn">▶️ 预览决策</button>
+                </div>
+            </form>
+
+            <div id="preview-result" class="preview-result" style="display: none;">
+                <h4>决策结果</h4>
+                <div id="preview-content">
+                    <p><strong>动作：</strong><span id="preview-action" class="action-tag"></span></p>
+                    <p><strong>目标功率：</strong><span id="preview-power"></span> kW</p>
+                    <p><strong>说明：</strong><span id="preview-message"></span></p>
+                    <p style="color: #6b7280; font-size: 13px;"><strong>时间：</strong><span id="preview-time"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/strategy.js"></script>
+{% endblock %}

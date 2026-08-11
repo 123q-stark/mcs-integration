@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}首页 - 光储充管理系统{% endblock %}
+
+{% block content %}
+<header class="topbar">
+    <div>
+        <p class="eyebrow">Python · FastAPI · SQLite · JavaScript</p>
+        <h1>{{ project_name }}</h1>
+        <p class="subtitle">用一个简单场景理解数据、策略、数据库、API 与页面之间的完整链路。</p>
+    </div>
+    <button id="resetButton" class="reset-button">重置演示</button>
+</header>
+
+<main class="page">
+    <section class="cards">
+        <article class="metric-card">
+            <span>光伏功率</span>
+            <strong id="pvPower">--</strong>
+            <small>kW</small>
+        </article>
+        <article class="metric-card">
+            <span>负载功率</span>
+            <strong id="loadPower">--</strong>
+            <small>kW</small>
+        </article>
+        <article class="metric-card">
+            <span>储能功率</span>
+            <strong id="storagePower">--</strong>
+            <small>kW</small>
+        </article>
+        <article class="metric-card">
+            <span>储能 SOC</span>
+            <strong id="storageSoc">--</strong>
+            <small>%</small>
+        </article>
+    </section>
+
+    <section class="grid">
+        <article class="panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-label">CURRENT DECISION</p>
+                    <h2>当前策略结果</h2>
+                </div>
+                <span id="actionBadge" class="badge">等待数据</span>
+            </div>
+            <div class="strategy-box">
+                <p id="strategyMessage">正在读取后端状态……</p>
+                <span id="updatedAt">--</span>
+            </div>
+            <div class="soc-row">
+                <span>储能剩余电量</span>
+                <span id="socText">--%</span>
+            </div>
+            <div class="progress-track">
+                <div id="socBar" class="progress-bar"></div>
+            </div>
+        </article>
+
+
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="panel-label">HISTORY</p>
+                <h2>最近功率趋势</h2>
+            </div>
+            <span class="legend">
+                <i class="line pv"></i>光伏
+                <i class="line load"></i>负载
+                <i class="line storage"></i>储能
+            </span>
+        </div>
+        <canvas id="historyChart" height="290"></canvas>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="panel-label">COMMAND LOG</p>
+                <h2>最近控制记录</h2>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>动作</th>
+                        <th>控制功率</th>
+                        <th>策略说明</th>
+                        <th>结果</th>
+                    </tr>
+                </thead>
+                <tbody id="commandBody">
+                    <tr><td colspan="5">正在读取数据……</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="/static/app.js"></script>
+{% endblock %}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}光储充管理系统{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .main-nav {
+            background: #1f2937;
+            padding: 12px 24px;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+        .main-nav a {
+            color: #d1d5db;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .main-nav a:hover {
+            color: #ffffff;
+            background: #374151;
+        }
+        .main-nav a.active {
+            color: #ffffff;
+            background: #4f8cf7;
+        }
+        .main-nav .brand {
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 18px;
+            margin-right: 24px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="main-nav">
+        <span class="brand">⚡ 光储充</span>
+        <a href="/">首页</a>
+        <a href="/devices">设备管理</a>
+        <a href="/strategy">策略配置</a>
+    </nav>
+       <main>
+        {% block content %}{% endblock %}
+    </main>
+    <div id="toast" class="toast"></div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

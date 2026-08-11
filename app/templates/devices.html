@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}设备管理 - 光储充管理系统{% endblock %}
+
+{% block content %}
+<style>
+    /* ===== 页面顶部 ===== */
+    .device-topbar {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f4f9 100%);
+        border-radius: 16px;
+        padding: 24px 32px;
+        margin-bottom: 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        border: 1px solid #eef2f6;
+    }
+    .device-topbar .left h1 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 700;
+        color: #1a2332;
+    }
+    .device-topbar .left p {
+        margin: 4px 0 0 0;
+        font-size: 14px;
+        color: #7a8a9b;
+    }
+    .device-topbar .right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .device-topbar .right .stat-badge {
+        background: #ffffff;
+        padding: 6px 18px;
+        border-radius: 20px;
+        font-size: 14px;
+        color: #1a2332;
+        font-weight: 500;
+        border: 1px solid #eef2f6;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .device-topbar .right .stat-badge .num {
+        font-weight: 700;
+        color: #0b1a2b;
+    }
+    .device-topbar .right .stat-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+    .device-topbar .right .stat-dot.online {
+        background: #10b981;
+    }
+    .device-topbar .right .stat-dot.offline {
+        background: #ef4444;
+    }
+    .device-topbar .right .refresh-btn {
+        background: #ffffff;
+        border: 1px solid #eef2f6;
+        padding: 8px 22px;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #1a2332;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+    .device-topbar .right .refresh-btn:hover {
+        background: #f1f4f9;
+        border-color: #dce3ec;
+    }
+    .device-topbar .right .refresh-btn:active {
+        transform: scale(0.96);
+    }
+
+    /* ===== 设备卡片网格 ===== */
+    .device-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+        margin-top: 4px;
+    }
+
+    /* ===== 单个设备卡片 ===== */
+    .device-card {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #eef2f6;
+        padding: 20px 22px 18px 22px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        transition: all 0.25s ease;
+        display: flex;
+        flex-direction: column;
+    }
+    .device-card:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        transform: translateY(-3px);
+        border-color: #dce3ec;
+    }
+
+    /* 卡片顶部：图标 + 状态 */
+    .device-card .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+    }
+    .device-card .card-top .device-icon {
+        font-size: 28px;
+        line-height: 1;
+    }
+    .device-card .card-top .status-tag {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 14px;
+        border-radius: 20px;
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    .device-card .card-top .status-tag.offline {
+        background: #fce4ec;
+        color: #c62828;
+    }
+
+    /* 设备名称 + 编码 */
+    .device-card .device-title {
+        margin-bottom: 2px;
+    }
+    .device-card .device-title .device-name {
+        font-size: 18px;
+        font-weight: 600;
+        color: #0b1a2b;
+    }
+    .device-card .device-title .device-code {
+        font-size: 13px;
+        color: #8c9aab;
+        font-weight: 400;
+        margin-left: 8px;
+    }
+
+    /* 设备类型标签 */
+    .device-card .type-tag {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 2px 14px;
+        border-radius: 12px;
+        background: #f0f4f9;
+        color: #3d4e62;
+        margin: 6px 0 12px 0;
+        align-self: flex-start;
+    }
+
+    /* 详情行 */
+    .device-card .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        border-bottom: 1px solid #f5f7fa;
+        font-size: 14px;
+    }
+    .device-card .detail-row:last-of-type {
+        border-bottom: none;
+    }
+    .device-card .detail-row .label {
+        color: #8c9aab;
+    }
+    .device-card .detail-row .value {
+        color: #1a2332;
+        font-weight: 500;
+    }
+
+    /* 更新时间 */
+    .device-card .update-time {
+        font-size: 12px;
+        color: #b0bec5;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #f0f2f5;
+    }
+
+    /* 查看状态按钮 */
+    .device-card .status-btn {
+        margin-top: 14px;
+        padding: 10px 0;
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        background: #f0f4f9;
+        color: #1a2332;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+    .device-card .status-btn:hover {
+        background: #e3e8ef;
+    }
+    .device-card .status-btn:active {
+        transform: scale(0.97);
+    }
+
+    /* ===== 状态面板 ===== */
+    #statusPanel {
+        margin-top: 28px;
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #eef2f6;
+        padding: 24px 28px 22px 28px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        display: none;
+        animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    #statusPanel .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #f0f2f5;
+        padding-bottom: 14px;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    #statusPanel .panel-head h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #1a2332;
+    }
+    #statusPanel .panel-head .type-badge {
+        background: #f0f4f9;
+        padding: 4px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #3d4e62;
+    }
+    #statusPanel .status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 40px;
+    }
+    #statusPanel .status-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #f7f8fa;
+    }
+    #statusPanel .status-item .label {
+        color: #7a8a9b;
+        font-size: 14px;
+    }
+    #statusPanel .status-item .value {
+        font-weight: 600;
+        color: #1a2332;
+        font-size: 15px;
+    }
+    #statusPanel .status-item .value .unit {
+        font-weight: 400;
+        color: #8c9aab;
+        font-size: 13px;
+        margin-left: 2px;
+    }
+    #statusPanel .close-btn {
+        margin-top: 20px;
+        padding: 10px 28px;
+        background: #f5f7fa;
+        border: none;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 14px;
+        color: #4b5563;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    #statusPanel .close-btn:hover {
+        background: #eaeef2;
+    }
+
+    /* ===== 占位文字 ===== */
+    .loading-text, .empty-text {
+        grid-column: 1 / -1;
+        text-align: center;
+        color: #b0bec5;
+        padding: 40px 0;
+        font-size: 15px;
+    }
+
+    /* ===== 响应式 ===== */
+    @media (max-width: 820px) {
+        .device-topbar {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 18px 20px;
+        }
+        .device-topbar .right {
+            width: 100%;
+            justify-content: flex-start;
+        }
+        .device-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        #statusPanel .status-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    @media (max-width: 500px) {
+        .device-grid {
+            grid-template-columns: 1fr;
+        }
+        .device-topbar .right {
+            flex-wrap: wrap;
+        }
+        #statusPanel {
+            padding: 16px;
+        }
+    }
+</style>
+
+<!-- ===== 页面顶部 ===== -->
+<div class="device-topbar">
+    <div class="left">
+        <h1>📟 设备管理</h1>
+        <p>查看所有设备的实时状态与运行参数</p>
+    </div>
+    <div class="right">
+        <span class="stat-badge">
+            📊 <span class="num" id="deviceCount">0</span> 个设备
+        </span>
+        <span class="stat-badge">
+            <span class="stat-dot online"></span> <span id="onlineCount">0</span> 在线
+        </span>
+        <span class="stat-badge">
+            <span class="stat-dot offline"></span> <span id="offlineCount">0</span> 离线
+        </span>
+        <button id="refreshButton" class="refresh-btn">🔄 刷新</button>
+    </div>
+</div>
+
+<!-- ===== 设备列表 ===== -->
+<div id="deviceList" class="device-grid">
+    <p class="loading-text">⏳ 正在加载设备列表…</p>
+</div>
+
+<!-- ===== 状态面板 ===== -->
+<section id="statusPanel">
+    <div class="panel-head">
+        <h2 id="statusDeviceName">📊 设备状态</h2>
+        <span id="statusDeviceType" class="type-badge">--</span>
+    </div>
+    <div class="status-grid">
+        <div class="status-item">
+            <span class="label">设备编码</span>
+            <span class="value" id="statusDeviceCode">--</span>
+        </div>
+        <div class="status-item">
+            <span class="label">在线状态</span>
+            <span class="value" id="statusOnline" style="font-size:14px; font-weight:500;">--</span>
+        </div>
+        <div class="status-item">
+            <span class="label">当前功率</span>
+            <span class="value" id="statusPower">-- <span class="unit">kW</span></span>
+        </div>
+        <div class="status-item" id="statusSocRow" style="display:none;">
+            <span class="label">储能 SOC</span>
+            <span class="value" id="statusSoc">-- <span class="unit">%</span></span>
+        </div>
+        <div class="status-item" style="grid-column: 1 / -1; border-bottom: none;">
+            <span class="label">更新时间</span>
+            <span class="value" id="statusUpdatedAt" style="font-weight:400; color:#6b7a8c; font-size:14px;">--</span>
+        </div>
+    </div>
+    <button id="closeStatusBtn" class="close-btn">✕ 关闭状态</button>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/devices.js"></script>
+{% endblock %}这是html文件，直接告诉我如何修改

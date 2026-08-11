@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+
+class SystemState(BaseModel):
+    """设备层向策略层提供的统一系统状态。"""
+
+    timestamp: datetime
+    simulated_hour: float
+    pv_power: float
+    load_power: float
+    storage_power: float
+    storage_soc: float
+
+
+class ControlDecision(BaseModel):
+    """策略层向执行层提供的统一控制决策。"""
+
+    storage_power_target: float
+    action: str
+    message: str
+    created_at: datetime
+
+
+class StatusResponse(BaseModel):
+    pv_power: float
+    load_power: float
+    storage_power: float
+    storage_soc: float
+    action: str
+    strategy_message: str
+    updated_at: datetime
+
+
+class HistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    pv_power: float
+    load_power: float
+    storage_power: float
+    storage_soc: float
+
+
+class CommandItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    command_value: float
+    action: str
+    strategy_message: str
+    execute_result: str
+
+
+class ResetResponse(BaseModel):
+    success: bool
+    message: str
