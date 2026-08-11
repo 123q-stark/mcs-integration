@@ -48,6 +48,8 @@ def create_app(
         with database.session() as db:
             DeviceRepository(db).ensure_default_devices()
             StrategyRepository(db).ensure_default_config()
+            from app.repositories.strategy_device_repository import StrategyDeviceRepository
+            StrategyDeviceRepository(db).init_default_configs()
 
         # 3. 存储 service 到 app.state
         app.state.database = database
