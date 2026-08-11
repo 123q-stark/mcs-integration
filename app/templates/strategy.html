@@ -3,35 +3,62 @@
 
 {% block content %}
 <style>
-    .config-panel {
-        max-width: 800px;
+    .container {
+        max-width: 1400px;
         margin: 0 auto;
         padding: 20px;
     }
-    .config-form {
-        background: #f5f7fa;
-        border-radius: 8px;
-        padding: 24px;
+    .header {
         margin-bottom: 24px;
     }
-    .form-group {
+    .header h1 {
+        margin-bottom: 4px;
+    }
+    .header p {
+        color: #6b7280;
+        margin-top: 0;
+    }
+    .config-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    .config-section {
+        background: #f5f7fa;
+        border-radius: 8px;
+        padding: 20px;
+        border: 1px solid #e5e7eb;
+    }
+    .config-section h3 {
+        margin-top: 0;
         margin-bottom: 16px;
+        color: #1f2937;
+        font-size: 16px;
+        border-bottom: 2px solid #4f8cf7;
+        padding-bottom: 8px;
+    }
+    .config-section.full-width {
+        grid-column: 1 / -1;
+    }
+    .form-group {
+        margin-bottom: 12px;
     }
     .form-group label {
         display: block;
         margin-bottom: 4px;
         font-weight: 600;
         color: #333;
+        font-size: 14px;
     }
-    .form-group input {
+    .form-group input, .form-group select {
         width: 100%;
-        padding: 10px 12px;
+        padding: 8px 12px;
         border: 1px solid #d1d5db;
         border-radius: 6px;
         font-size: 14px;
         box-sizing: border-box;
     }
-    .form-group input:focus {
+    .form-group input:focus, .form-group select:focus {
         outline: none;
         border-color: #4f8cf7;
         box-shadow: 0 0 0 3px rgba(79, 140, 247, 0.1);
@@ -41,8 +68,55 @@
         grid-template-columns: 1fr 1fr;
         gap: 16px;
     }
+    .form-row-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 16px;
+    }
+    .form-row-4 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 16px;
+    }
+    .device-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+    .device-table th {
+        background: #e5e7eb;
+        padding: 8px 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .device-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .device-table tr:hover {
+        background: #f9fafb;
+    }
+    .device-table input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    .device-table input[type="number"] {
+        width: 80px;
+        padding: 4px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    .device-table select {
+        padding: 4px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 13px;
+    }
     .btn {
-        padding: 10px 24px;
+        padding: 8px 20px;
         border: none;
         border-radius: 6px;
         font-size: 14px;
@@ -71,22 +145,90 @@
     .btn-warning:hover {
         background: #d97706;
     }
-    .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
+    .btn-secondary {
+        background: #6b7280;
+        color: white;
+    }
+    .btn-secondary:hover {
+        background: #4b5563;
     }
     .button-group {
         display: flex;
         gap: 12px;
-        margin-top: 8px;
+        margin-top: 12px;
         flex-wrap: wrap;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .status-badge.active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .status-badge.inactive {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 6px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+    }
+    .toast.success {
+        background: #10b981;
+    }
+    .toast.error {
+        background: #ef4444;
+    }
+    .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+    .mode-display {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+        background: #f9fafb;
+        border-radius: 6px;
+        margin-bottom: 12px;
+    }
+    .mode-display .label {
+        font-weight: 600;
+        color: #4b5563;
+    }
+    .mode-display .value {
+        font-weight: 700;
+        color: #1f2937;
+    }
+    .mode-display .value.recommended {
+        color: #4f8cf7;
+    }
+    .readonly-field {
+        background: #f3f4f6;
+        cursor: not-allowed;
+        opacity: 0.8;
     }
     .preview-panel {
         background: #ffffff;
         border: 1px solid #e5e7eb;
         border-radius: 8px;
-        padding: 24px;
-        margin-top: 24px;
+        padding: 20px;
+        margin-top: 20px;
     }
     .preview-panel h3 {
         margin-top: 0;
@@ -117,106 +259,263 @@
         background: #e5e7eb;
         color: #4b5563;
     }
-    .toast {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 24px;
-        border-radius: 6px;
-        color: white;
-        font-weight: 500;
-        z-index: 1000;
-        opacity: 0;
-        transform: translateY(-20px);
-        transition: all 0.3s ease;
-        pointer-events: none;
-    }
-    .toast.success {
-        background: #10b981;
-    }
-    .toast.error {
-        background: #ef4444;
-    }
-    .toast.show {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
-    .status-text {
-        font-size: 14px;
-        color: #6b7280;
-        margin-top: 8px;
-    }
-    .status-text .active {
-        color: #10b981;
-        font-weight: 600;
-    }
-    .header {
-        margin-bottom: 20px;
-    }
-    .header h1 {
-        margin-bottom: 4px;
-    }
-    .header p {
-        color: #6b7280;
-        margin-top: 0;
+    @media (max-width: 768px) {
+        .config-grid {
+            grid-template-columns: 1fr;
+        }
+        .form-row, .form-row-3, .form-row-4 {
+            grid-template-columns: 1fr;
+        }
+        .device-table {
+            font-size: 12px;
+        }
+        .device-table input[type="number"] {
+            width: 60px;
+        }
     }
 </style>
 
 <div class="container">
     <div class="header">
-        <h1>⚙️ 策略配置</h1>
-        <p>配置储能充放电策略参数，实时预览决策结果</p>
+        <h1>⚙️ 完整站点策略配置中心</h1>
+        <p>配置 5PV、5Charger、Battery、Grid、电价和运行模式</p>
     </div>
 
-    <div class="config-panel">
-        <!-- 配置表单 -->
-        <div class="config-form">
-            <h2>当前策略配置</h2>
-            <div id="config-status" class="status-text">加载中...</div>
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
 
-            <form id="strategy-form">
-                <div class="form-group">
-                    <label for="config-name">配置名称</label>
-                    <input type="text" id="config-name" placeholder="请输入配置名称" required>
-                </div>
+    <!-- 配置网格 -->
+    <div class="config-grid">
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="soc-min">SOC 下限 (%)</label>
-                        <input type="number" id="soc-min" min="0" max="100" step="0.1" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="soc-max">SOC 上限 (%)</label>
-                        <input type="number" id="soc-max" min="0" max="100" step="0.1" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="charge-power">充电功率 (kW)</label>
-                        <input type="number" id="charge-power" min="0.1" max="10" step="0.1" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="discharge-power">放电功率 (kW)</label>
-                        <input type="number" id="discharge-power" min="0.1" max="10" step="0.1" required>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary" id="save-btn">💾 保存配置</button>
-                    <button type="button" class="btn btn-warning" id="load-btn">📥 加载当前配置</button>
-                </div>
-            </form>
+        <!-- ===== 区域 ①：运行模式 ===== -->
+        <div class="config-section">
+            <h3>① 运行模式</h3>
+            <div class="form-group">
+                <label for="requested-mode">请求模式 (requested_mode)</label>
+                <select id="requested-mode">
+                    <option value="AUTO">AUTO（自动）</option>
+                    <option value="PV_PRIORITY">PV_PRIORITY（光伏优先）</option>
+                    <option value="ECONOMIC_SCHEDULE">ECONOMIC_SCHEDULE（经济调度）</option>
+                    <option value="GRID_BACKUP">GRID_BACKUP（电网备用）</option>
+                    <option value="SAFE">SAFE（安全模式）</option>
+                </select>
+            </div>
+            <div class="mode-display">
+                <span class="label">有效模式 (effective_mode)：</span>
+                <span class="value" id="effective-mode-display">AUTO</span>
+            </div>
+            <div class="mode-display">
+                <span class="label">策略状态：</span>
+                <span id="strategy-status" class="status-badge active">就绪</span>
+            </div>
+            <button class="btn btn-primary" onclick="saveMode()">💾 保存模式</button>
         </div>
 
-        <!-- 预览面板 -->
-        <div class="preview-panel">
-            <h3>🔮 策略预览</h3>
-            <p style="color: #6b7280; font-size: 14px;">输入模拟状态，查看当前策略会做出什么决策</p>
+        <!-- ===== 区域 ②：5 路 PV 策略配置 ===== -->
+        <div class="config-section">
+            <h3>② 5 路 PV 策略配置</h3>
+            <table class="device-table">
+                <thead>
+                    <tr>
+                        <th>设备</th>
+                        <th>参与策略</th>
+                        <th>允许策略控制</th>
+                        <th>优先级</th>
+                    </tr>
+                </thead>
+                <tbody id="pv-config-table">
+                    <tr>
+                        <td>PV001</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" disabled></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>PV002</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" disabled></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>PV003</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" disabled></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>PV004</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" disabled></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>PV005</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" disabled></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 PV 仅展示配置，不执行自动弃光</p>
+        </div>
 
+        <!-- ===== 区域 ③：5 个 Charger 策略配置 ===== -->
+        <div class="config-section">
+            <h3>③ 5 个充电桩策略配置</h3>
+            <table class="device-table">
+                <thead>
+                    <tr>
+                        <th>设备</th>
+                        <th>参与策略</th>
+                        <th>允许策略控制</th>
+                        <th>功率上限</th>
+                        <th>优先级</th>
+                    </tr>
+                </thead>
+                <tbody id="charger-config-table">
+                    <tr>
+                        <td>CHG001</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>CHG002</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
+                        <td><input type="number" value="2" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>CHG003</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
+                        <td><input type="number" value="3" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>CHG004</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
+                        <td><input type="number" value="4" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                    <tr>
+                        <td>CHG005</td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="checkbox" checked disabled></td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
+                        <td><input type="number" value="5" min="1" max="5" style="width:50px;" disabled></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 Charger 配置已预留，自动优化暂不执行</p>
+        </div>
+
+        <!-- ===== 区域 ④：Battery 策略配置 ===== -->
+        <div class="config-section">
+            <h3>④ Battery 策略配置</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="batt-soc-min">SOC 下限 (%)</label>
+                    <input type="number" id="batt-soc-min" value="20" min="0" max="100" step="1">
+                </div>
+                <div class="form-group">
+                    <label for="batt-soc-max">SOC 上限 (%)</label>
+                    <input type="number" id="batt-soc-max" value="90" min="0" max="100" step="1">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="batt-charge-power">最大充电功率 (kW)</label>
+                    <input type="number" id="batt-charge-power" value="10" min="0" max="50" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label for="batt-discharge-power">最大放电功率 (kW)</label>
+                    <input type="number" id="batt-discharge-power" value="10" min="0" max="50" step="0.5">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="batt-backup-soc">备用 SOC 目标 (%)</label>
+                <input type="number" id="batt-backup-soc" value="50" min="0" max="100" step="1">
+            </div>
+            <button class="btn btn-warning" onclick="saveBatteryConfig()">💾 保存 Battery 配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑤：Grid 策略配置 ===== -->
+        <div class="config-section">
+            <h3>⑤ Grid 策略配置</h3>
+            <div class="form-group">
+                <label for="grid-max-import">最大购电功率 (kW)</label>
+                <input type="number" id="grid-max-import" value="300" min="0" max="1000" step="10">
+            </div>
+            <div class="form-group">
+                <label for="grid-allow-export">
+                    <input type="checkbox" id="grid-allow-export" checked>
+                    允许向电网送电
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="grid-max-export">最大上网功率 (kW)</label>
+                <input type="number" id="grid-max-export" value="100" min="0" max="500" step="10">
+            </div>
+            <button class="btn btn-warning" onclick="saveGridConfig()">💾 保存 Grid 配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑥：Price 配置 ===== -->
+        <div class="config-section">
+            <h3>⑥ 电价配置</h3>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label for="price-valley">谷价 (CNY/kWh)</label>
+                    <input type="number" id="price-valley" value="0.35" min="0" max="10" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="price-flat">平价 (CNY/kWh)</label>
+                    <input type="number" id="price-flat" value="0.55" min="0" max="10" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="price-peak">峰价 (CNY/kWh)</label>
+                    <input type="number" id="price-peak" value="0.85" min="0" max="10" step="0.01">
+                </div>
+            </div>
+            <div class="mode-display">
+                <span class="label">当前时段价格：</span>
+                <span class="value" id="current-price-display">0.55 CNY/kWh</span>
+            </div>
+            <button class="btn btn-warning" onclick="savePriceConfig()">💾 保存电价配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑦：策略结果口（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>⑦ STRATEGY 结果口</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div><strong>当前算法：</strong><span id="result-algorithm">FixedRule</span></div>
+                <div><strong>请求模式：</strong><span id="result-requested-mode">AUTO</span></div>
+                <div><strong>有效模式：</strong><span id="result-effective-mode">AUTO</span></div>
+                <div><strong>是否 Fallback：</strong><span id="result-fallback">否</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div><strong>当前 Storage Target：</strong><span id="result-storage-target">0.0 kW</span></div>
+                <div><strong>最后运行时间：</strong><span id="result-last-run">-</span></div>
+            </div>
+            <div style="margin-bottom:12px;">
+                <strong>当前决策说明：</strong>
+                <span id="result-message">等待策略运行...</span>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="runStrategy()">▶️ 运行一次策略</button>
+                <button class="btn btn-secondary" onclick="refreshResult()">🔄 刷新结果</button>
+            </div>
+        </div>
+
+        <!-- ===== 预览面板（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>🔮 策略预览</h3>
+            <p style="color:#6b7280;font-size:14px;">输入模拟状态，查看当前策略会做出什么决策</p>
             <form id="preview-form">
-                <div class="form-row">
+                <div class="form-row-3">
                     <div class="form-group">
                         <label for="pv-power">光伏功率 (kW)</label>
                         <input type="number" id="pv-power" value="40" step="0.1">
@@ -225,8 +524,6 @@
                         <label for="load-power">负载功率 (kW)</label>
                         <input type="number" id="load-power" value="30" step="0.1">
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
                         <label for="storage-power">储能功率 (kW)</label>
                         <input type="number" id="storage-power" value="0" step="0.1">
@@ -236,24 +533,215 @@
                         <input type="number" id="storage-soc" value="50" min="0" max="100" step="0.1">
                     </div>
                 </div>
-
                 <div class="button-group">
                     <button type="submit" class="btn btn-success" id="preview-btn">▶️ 预览决策</button>
                 </div>
             </form>
-
-            <div id="preview-result" class="preview-result" style="display: none;">
+            <div id="preview-result" class="preview-result" style="display:none;">
                 <h4>决策结果</h4>
                 <div id="preview-content">
                     <p><strong>动作：</strong><span id="preview-action" class="action-tag"></span></p>
                     <p><strong>目标功率：</strong><span id="preview-power"></span> kW</p>
                     <p><strong>说明：</strong><span id="preview-message"></span></p>
-                    <p style="color: #6b7280; font-size: 13px;"><strong>时间：</strong><span id="preview-time"></span></p>
+                    <p style="color:#6b7280;font-size:13px;"><strong>时间：</strong><span id="preview-time"></span></p>
                 </div>
             </div>
         </div>
+
     </div>
 </div>
+
+<script>
+    // ============ 工具函数 ============
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast ' + type + ' show';
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    // ============ 模式保存 ============
+    function saveMode() {
+        const mode = document.getElementById('requested-mode').value;
+        fetch('/api/strategies/mode', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({requested_mode: mode})
+        })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('effective-mode-display').textContent = data.effective_mode || mode;
+            showToast('模式已保存: ' + mode);
+        })
+        .catch(() => showToast('保存失败', 'error'));
+    }
+
+    // ============ Battery 配置保存 ============
+    function saveBatteryConfig() {
+        const data = {
+            soc_min: parseFloat(document.getElementById('batt-soc-min').value),
+            soc_max: parseFloat(document.getElementById('batt-soc-max').value),
+            charge_power_kw: parseFloat(document.getElementById('batt-charge-power').value),
+            discharge_power_kw: parseFloat(document.getElementById('batt-discharge-power').value),
+            backup_soc_target: parseFloat(document.getElementById('batt-backup-soc').value)
+        };
+        fetch('/api/strategies/config', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                config_name: 'default',
+                ...data
+            })
+        })
+        .then(res => res.json())
+        .then(() => showToast('Battery 配置已保存'))
+        .catch(() => showToast('保存失败', 'error'));
+    }
+
+    // ============ Grid 配置保存 ============
+    function saveGridConfig() {
+        const data = {
+            max_import_power_kw: parseFloat(document.getElementById('grid-max-import').value),
+            allow_export: document.getElementById('grid-allow-export').checked,
+            max_export_power_kw: parseFloat(document.getElementById('grid-max-export').value)
+        };
+        fetch('/api/strategies/grid-config', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(() => showToast('Grid 配置已保存'))
+        .catch(() => showToast('保存失败', 'error'));
+    }
+
+    // ============ Price 配置保存 ============
+    function savePriceConfig() {
+        const data = {
+            valley_price: parseFloat(document.getElementById('price-valley').value),
+            flat_price: parseFloat(document.getElementById('price-flat').value),
+            peak_price: parseFloat(document.getElementById('price-peak').value)
+        };
+        fetch('/api/strategies/price-config', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(() => showToast('电价配置已保存'))
+        .catch(() => showToast('保存失败', 'error'));
+    }
+
+    // ============ 运行策略 ============
+    function runStrategy() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = '运行中...';
+        fetch('/api/strategies/run', {method: 'POST'})
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('result-storage-target').textContent = data.storage_power_target + ' kW';
+            document.getElementById('result-message').textContent = data.message;
+            document.getElementById('result-last-run').textContent = new Date().toLocaleString();
+            showToast('策略运行完成');
+        })
+        .catch(() => showToast('运行失败', 'error'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.textContent = '▶️ 运行一次策略';
+        });
+    }
+
+    // ============ 刷新结果 ============
+    function refreshResult() {
+        fetch('/api/strategies/runtime')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('result-algorithm').textContent = data.source || 'FixedRule';
+            document.getElementById('result-requested-mode').textContent = data.requested_mode || 'AUTO';
+            document.getElementById('result-effective-mode').textContent = data.effective_mode || 'AUTO';
+            document.getElementById('result-fallback').textContent = data.fallback ? '是' : '否';
+            document.getElementById('result-storage-target').textContent = data.storage_power_target + ' kW';
+            document.getElementById('result-message').textContent = data.message || '-';
+            if (data.executed_at) {
+                document.getElementById('result-last-run').textContent = new Date(data.executed_at).toLocaleString();
+            }
+        })
+        .catch(() => {});
+    }
+
+    // ============ 预览决策 ============
+    document.getElementById('preview-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const data = {
+            pv_power: parseFloat(document.getElementById('pv-power').value),
+            load_power: parseFloat(document.getElementById('load-power').value),
+            storage_power: parseFloat(document.getElementById('storage-power').value),
+            storage_soc: parseFloat(document.getElementById('storage-soc').value)
+        };
+        fetch('/api/strategies/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(result => {
+            const actionEl = document.getElementById('preview-action');
+            actionEl.textContent = result.action;
+            actionEl.className = 'action-tag ' + result.action;
+            document.getElementById('preview-power').textContent = result.storage_power_target;
+            document.getElementById('preview-message').textContent = result.message;
+            document.getElementById('preview-time').textContent = new Date(result.created_at).toLocaleString();
+            document.getElementById('preview-result').style.display = 'block';
+        })
+        .catch(() => {
+            document.getElementById('preview-result').style.display = 'block';
+            document.getElementById('preview-message').textContent = '预览失败，请检查输入';
+        });
+    });
+
+    // ============ 加载默认配置 ============
+    function loadDefaultConfigs() {
+        // 加载电价
+        fetch('/api/strategies/price-config')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('price-valley').value = data.valley_price;
+            document.getElementById('price-flat').value = data.flat_price;
+            document.getElementById('price-peak').value = data.peak_price;
+        })
+        .catch(() => {});
+
+        // 加载 Grid
+        fetch('/api/strategies/grid-config')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('grid-max-import').value = data.max_import_power_kw;
+            document.getElementById('grid-allow-export').checked = data.allow_export;
+            document.getElementById('grid-max-export').value = data.max_export_power_kw;
+        })
+        .catch(() => {});
+
+        // 加载策略配置
+        fetch('/api/strategies/config')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('batt-soc-min').value = data.soc_min;
+            document.getElementById('batt-soc-max').value = data.soc_max;
+            document.getElementById('batt-charge-power').value = data.charge_power_kw;
+            document.getElementById('batt-discharge-power').value = data.discharge_power_kw;
+            document.getElementById('batt-backup-soc').value = data.backup_soc_target || 50;
+            document.getElementById('requested-mode').value = data.requested_mode || 'AUTO';
+            document.getElementById('effective-mode-display').textContent = data.requested_mode || 'AUTO';
+        })
+        .catch(() => {});
+    }
+
+    // 页面加载完成后加载配置
+    document.addEventListener('DOMContentLoaded', loadDefaultConfigs);
+</script>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/strategy.js"></script>
