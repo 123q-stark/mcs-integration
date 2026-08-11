@@ -1,4 +1,3 @@
-# app/services/strategy_service.py
 """
 策略配置业务服务
 负责策略配置的获取、更新和预览
@@ -36,14 +35,16 @@ class StrategyService:
         更新当前策略配置（完整更新）
         先停用所有配置，然后创建新配置
         """
-        # 调用 Repository 更新
+        # ===== 修改点：传递新增字段 =====
         new_config = self.repository.update_active_config(
             config_name=request.config_name,
             soc_min=request.soc_min,
             soc_max=request.soc_max,
             charge_power_kw=request.charge_power_kw,
             discharge_power_kw=request.discharge_power_kw,
-            is_active=True,  # ← 强制设为 True
+            requested_mode=request.requested_mode,           # 新增
+            backup_soc_target=request.backup_soc_target,     # 新增
+            is_active=True,
         )
         return StrategyConfigResponse.model_validate(new_config)
 
