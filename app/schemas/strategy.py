@@ -126,3 +126,22 @@ class PriceConfigUpdate(BaseModel):
     valley_price: float | None = Field(None, ge=0, description="谷价 (CNY/kWh)")
     flat_price: float | None = Field(None, ge=0, description="平价 (CNY/kWh)")
     peak_price: float | None = Field(None, ge=0, description="峰价 (CNY/kWh)")
+
+
+# ============ 电网策略配置 Schema（B-04） ============
+
+class GridStrategyConfigResponse(BaseModel):
+    """电网策略配置响应模型"""
+    id: int
+    max_import_power_kw: float
+    allow_export: bool
+    max_export_power_kw: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GridStrategyConfigUpdate(BaseModel):
+    """电网策略配置更新请求模型"""
+    max_import_power_kw: float | None = Field(None, gt=0, description="最大购电功率 (kW)")
+    allow_export: bool | None = Field(None, description="是否允许向电网送电")
+    max_export_power_kw: float | None = Field(None, gt=0, description="最大上网功率 (kW)")
