@@ -6,8 +6,9 @@ from .common import (
     HistoryItem,
     CommandItem,
     ResetResponse,
+    ControlExecutionResult,
 )
-from .strategy import (  # 新增
+from .strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
     StrategyPreviewRequest,
@@ -21,8 +22,9 @@ __all__ = [
     "HistoryItem",
     "CommandItem",
     "ResetResponse",
-    "StrategyConfigResponse",  # 新增
-    "StrategyConfigUpdate",    # 新增
-    "StrategyPreviewRequest",  # 新增
-    "StrategyPreviewResponse", # 新增
+    "StrategyConfigResponse",
+    "StrategyConfigUpdate",
+    "StrategyPreviewRequest",
+    "StrategyPreviewResponse",
+    "ControlExecutionResult",
 ]
