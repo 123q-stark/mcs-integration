@@ -6,8 +6,6 @@ from pydantic import BaseModel, ConfigDict
 
 
 class SystemState(BaseModel):
-    """设备层向策略层提供的统一系统状态。"""
-
     timestamp: datetime
     simulated_hour: float
     pv_power: float
@@ -17,16 +15,12 @@ class SystemState(BaseModel):
 
 
 class ControlDecision(BaseModel):
-    """策略层向执行层提供的统一控制决策。"""
-
     storage_power_target: float
     action: str
     message: str
     created_at: datetime
     source: str = "fixed_rule"
     mode: str = "PV_PRIORITY"
-    decision_id: str | None = None
-    charger_targets: list[dict] = []
 
 
 class StatusResponse(BaseModel):
@@ -41,7 +35,6 @@ class StatusResponse(BaseModel):
 
 class HistoryItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     created_at: datetime
     pv_power: float
@@ -52,7 +45,6 @@ class HistoryItem(BaseModel):
 
 class CommandItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     created_at: datetime
     command_value: float

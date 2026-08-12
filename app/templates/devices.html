@@ -80,6 +80,52 @@
         transform: scale(0.96);
     }
 
+    /* ===== 系统口摘要卡 ===== */
+    .system-summary {
+        display: flex;
+        gap: 16px;
+        margin: 20px 0 24px 0;
+        flex-wrap: wrap;
+    }
+    .system-card {
+        background: #ffffff;
+        border: 1px solid #eef2f6;
+        border-radius: 12px;
+        padding: 16px 22px;
+        flex: 1;
+        min-width: 180px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .system-card .system-label {
+        display: block;
+        font-size: 12px;
+        color: #8c9aab;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+    .system-card .system-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1a2332;
+    }
+    .system-card .system-unit {
+        font-size: 14px;
+        color: #8c9aab;
+        margin-left: 4px;
+    }
+    .system-card .system-sub {
+        display: block;
+        font-size: 13px;
+        color: #7a8a9b;
+        margin-top: 2px;
+    }
+    .price-card .system-value {
+        color: #0f7b4a;
+    }
+    .strategy-card .system-value {
+        color: #4f8cf7;
+    }
+
     /* ===== 设备卡片网格 ===== */
     .device-grid {
         display: grid;
@@ -352,6 +398,21 @@
     </div>
 </div>
 
+<!-- ===== 系统口摘要卡（PRICE + STRATEGY） ===== -->
+<div class="system-summary">
+    <div class="system-card price-card">
+        <span class="system-label">💰 当前电价</span>
+        <span class="system-value" id="currentPrice">--</span>
+        <span class="system-unit">元/kWh</span>
+        <span class="system-sub" id="pricePeriod">--</span>
+    </div>
+    <div class="system-card strategy-card">
+        <span class="system-label">🎯 策略模式</span>
+        <span class="system-value" id="requestedMode">--</span>
+        <span class="system-sub" id="effectiveMode">生效: --</span>
+    </div>
+</div>
+
 <!-- ===== 设备列表 ===== -->
 <div id="deviceList" class="device-grid">
     <p class="loading-text">⏳ 正在加载设备列表…</p>
@@ -392,4 +453,4 @@
 
 {% block scripts %}
 <script src="/static/js/devices.js"></script>
-{% endblock %}这是html文件，直接告诉我如何修改
+{% endblock %}
