@@ -80,24 +80,25 @@ def get_device_status(
         )
 
 
-# ==================== 设备历史数据接口 ====================
-from app.models import DeviceHistory
+# ==================== A-06: 设备历史数据接口（使用 DeviceTelemetry） ====================
+from app.models.device_telemetry import DeviceTelemetry
+from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 from datetime import datetime, timedelta
 
 
 @router.get("/{device_id}/history")
 def get_device_history(
-        device_id: int,
-        request: Request,
-        hours: int = 24,
-        db: Session = Depends(get_db),
+    device_id: int,
+    request: Request,
+    hours: int = 24,
+    db: Session = Depends(get_db),
 ):
     """
     获取设备历史数据
     - **device_id**: 设备 ID
-    - **hours**: 查询过去 N 小时的数据（默认 24）
+    - **hours**: 查询过去 N 小时的数据（默认 24，最大 720 = 30天）
     """
-    # 检查设备是否存在
+    # 1. 检查设备是否存在
     repo = DeviceRepository(db)
     device = repo.get_by_id(device_id)
     if not device:
@@ -106,13 +107,23 @@ def get_device_history(
             detail=f"设备 ID {device_id} 不存在",
         )
 
-    # 查询历史数据
-    cutoff_time = datetime.now() - timedelta(hours=hours)
-    records = db.query(DeviceHistory).filter(
-        DeviceHistory.device_id == device_id,
-        DeviceHistory.created_at >= cutoff_time
-    ).order_by(DeviceHistory.created_at.asc()).all()
+    # 2. 限制查询范围（1~720小时，即15分钟~30天）
+    if hours > 720:
+        hours = 720
+    if hours < 1:
+        hours = 1
 
+    # 3. 计算记录数（15分钟步长 = 4条/小时）
+    limit = hours * 4
+
+    # 4. 通过 DeviceTelemetryRepository 查询
+    telemetry_repo = DeviceTelemetryRepository(db)
+    records = telemetry_repo.get_history(
+        device_code=device.device_code,
+        limit=limit,
+    )
+
+    # 5. 构造返回数据
     return {
         "device_id": device_id,
         "device_code": device.device_code,
@@ -122,7 +133,7 @@ def get_device_history(
             {
                 "time": r.created_at.isoformat(),
                 "power_kw": r.power_kw,
-                "storage_soc": r.storage_soc,
+                "storage_soc": r.soc,
             }
             for r in records
         ]
