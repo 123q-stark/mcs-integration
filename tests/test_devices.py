@@ -439,6 +439,8 @@ import pytest
 
 def test_device_status_pv(db_session):
     """测试：pv 设备状态映射（power_kw = pv_power, storage_soc = None）"""
+    from app.schemas.device_runtime import DeviceRuntimeState
+
     repo = DeviceRepository(db_session)
     repo.ensure_default_devices()
     service = DeviceService(repo)
@@ -450,6 +452,16 @@ def test_device_status_pv(db_session):
         load_power=30.0,
         storage_power=5.0,
         storage_soc=60.0,
+        pv_units=[
+            DeviceRuntimeState(
+                device_code="PV001",
+                device_type="pv",
+                timestamp=datetime.now(),
+                is_online=True,
+                quality="good",
+                power_kw=45.6,
+            )
+        ],
     )
     status = service.get_device_status(1, state)
     assert status.device_code == "PV001"
@@ -482,6 +494,8 @@ def test_device_status_storage(db_session):
 
 def test_device_status_charger(db_session):
     """测试：charger 设备状态映射（power_kw = load_power, storage_soc = None）"""
+    from app.schemas.device_runtime import DeviceRuntimeState
+
     repo = DeviceRepository(db_session)
     repo.ensure_default_devices()
     service = DeviceService(repo)
@@ -493,6 +507,19 @@ def test_device_status_charger(db_session):
         load_power=30.0,
         storage_power=5.0,
         storage_soc=60.0,
+        chargers=[
+            DeviceRuntimeState(
+                device_code="CHG001",
+                device_type="charger",
+                timestamp=datetime.now(),
+                is_online=True,
+                quality="good",
+                power_kw=30.0,
+                enabled=True,
+                status="charging",
+                connected=True,
+            )
+        ],
     )
     # CHG001 的 ID 是 6
     status = service.get_device_status(6, state)

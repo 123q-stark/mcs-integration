@@ -187,5 +187,43 @@ refreshButton.addEventListener('click', function() {
 
 document.addEventListener('DOMContentLoaded', function() {
     fetchDevices();
+    fetchSystemSummary();
     setInterval(fetchDevices, REFRESH_INTERVAL);
 });
+
+// ==================== A-09: 系统口摘要卡（PRICE + STRATEGY） ====================
+
+async function fetchSystemSummary() {
+    try {
+        // 获取策略运行时状态
+        const runtimeResp = await fetch('/api/strategies/runtime');
+        if (runtimeResp.ok) {
+            const runtime = await runtimeResp.json();
+            document.getElementById('requestedMode').textContent = runtime.requested_mode || '--';
+            document.getElementById('effectiveMode').textContent = `生效: ${runtime.effective_mode || '--'}`;
+        }
+    } catch (e) {
+        console.warn('获取策略状态失败:', e);
+    }
+
+    try {
+        // 获取当前电价配置
+        const priceResp = await fetch('/api/strategies/price-config');
+        if (priceResp.ok) {
+            const price = await priceResp.json();
+            const hour = new Date().getHours();
+            let period = '平段';
+            let priceVal = price.flat_price || 0.55;
+            if (hour >= 0 && hour < 7) { period = '谷段'; priceVal = price.valley_price || 0.35; }
+            else if (hour >= 7 && hour < 10) { period = '平段'; priceVal = price.flat_price || 0.55; }
+            else if (hour >= 10 && hour < 15) { period = '峰段'; priceVal = price.peak_price || 0.85; }
+            else if (hour >= 15 && hour < 18) { period = '平段'; priceVal = price.flat_price || 0.55; }
+            else if (hour >= 18 && hour < 21) { period = '峰段'; priceVal = price.peak_price || 0.85; }
+            else { period = '平段'; priceVal = price.flat_price || 0.55; }
+            document.getElementById('currentPrice').textContent = priceVal.toFixed(2);
+            document.getElementById('pricePeriod').textContent = period;
+        }
+    } catch (e) {
+        console.warn('获取电价配置失败:', e);
+    }
+}
