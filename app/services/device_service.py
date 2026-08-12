@@ -46,25 +46,41 @@ class DeviceService:
             updated_at=device.updated_at,
         )
 
-    # ==================== A-06: 设备状态映射 ====================
+    # ==================== 设备状态映射（从详细列表查找单个设备） ====================
     def get_device_status(self, device_id: int, state: SystemState) -> DeviceStatusResponse:
         """
-        根据设备类型从 SystemState 映射出设备状态
+        根据设备类型从 SystemState 中查找对应设备的实时状态
         """
         device = self.repository.get_by_id(device_id)
         if not device:
             raise DeviceNotFoundError(f"设备 ID {device_id} 不存在")
 
-        # 根据设备类型映射功率和 SOC
+        status = None  # 初始化
+
+        # 根据设备类型从 state 的详细列表中获取数据
         if device.device_type == "pv":
-            power_kw = state.pv_power
+            unit = next((u for u in state.pv_units if u.device_code == device.device_code), None)
+            power_kw = unit.power_kw if unit else 0.0
             storage_soc = None
-        elif device.device_type in ("storage", "battery"):
-            power_kw = state.storage_power
-            storage_soc = state.storage_soc
         elif device.device_type == "charger":
-            power_kw = state.load_power
+            unit = next((c for c in state.chargers if c.device_code == device.device_code), None)
+            power_kw = unit.power_kw if unit else 0.0
             storage_soc = None
+            status = unit.status if unit else None  # ← 新增
+        elif device.device_type in ("storage", "battery"):
+            if state.battery:
+                power_kw = state.battery.get("power_kw", 0.0)
+                storage_soc = state.battery.get("soc", None)
+            else:
+                power_kw = state.storage_power
+                storage_soc = state.storage_soc
+        elif device.device_type == "grid":
+            if state.grid:
+                power_kw = state.grid.get("power_kw", 0.0)
+                storage_soc = None
+            else:
+                power_kw = 0.0
+                storage_soc = None
         else:
             power_kw = 0.0
             storage_soc = None
@@ -77,4 +93,5 @@ class DeviceService:
             power_kw=power_kw,
             storage_soc=storage_soc,
             updated_at=state.timestamp,
+            status=status,  # ← 新增
         )

@@ -42,6 +42,8 @@ class SimulatorAdapter(DeviceAdapter):
         # ===== 更新状态 =====
         self._update_aggregate_state()
 
+        print(f"[Simulator] 初始化完成，ID: {id(self)}")
+
     def _init_pv_units(self) -> None:
         """初始化 5 路 PV"""
         pv_factors = [1.00, 0.95, 1.03, 0.98, 1.01]
@@ -167,7 +169,6 @@ class SimulatorAdapter(DeviceAdapter):
     def _update_battery(self, power_kw: float) -> None:
         """更新 Battery 状态"""
         self._battery.power_kw = round(power_kw, 2)
-        # SOC 更新由 execute_command 控制，这里只更新时间戳
         self._battery.timestamp = self._timestamp
         self._battery.is_online = True
 
@@ -182,12 +183,11 @@ class SimulatorAdapter(DeviceAdapter):
         self._grid.timestamp = self._timestamp
         self._grid.is_online = True
 
-        # 电流计算
         if self._grid.voltage_v and self._grid.voltage_v > 0:
             self._grid.current_a = round(abs(self._grid.power_kw) / self._grid.voltage_v * 1000, 2)
 
     def _update_aggregate_state(self) -> None:
-        """更新聚合 SystemState"""
+        """更新聚合 SystemState（包含扩展字段）"""
         pv_total = sum(pv.power_kw for pv in self._pv_units)
         load_total = sum(c.power_kw for c in self._chargers)
         battery_power = self._battery.power_kw
@@ -201,6 +201,11 @@ class SimulatorAdapter(DeviceAdapter):
             load_power=round(load_total, 2),
             storage_power=round(battery_power, 2),
             storage_soc=round(battery_soc, 2),
+            grid_power=round(grid_power, 2),
+            pv_units=[pv.model_copy(deep=True) for pv in self._pv_units],
+            chargers=[c.model_copy(deep=True) for c in self._chargers],
+            battery=self._battery.model_dump(),
+            grid=self._grid.model_dump(),
         )
 
     def _next_environment(self) -> None:
@@ -208,7 +213,6 @@ class SimulatorAdapter(DeviceAdapter):
         self._simulated_hour = (self._simulated_hour + self._simulation_step_hours) % 24.0
         self._timestamp = datetime.now()
 
-        # ===== 计算总 PV（基于日照基准） =====
         hour = self._simulated_hour
         if 6.0 <= hour <= 18.0:
             daylight_position = (hour - 6.0) / 12.0
@@ -216,12 +220,10 @@ class SimulatorAdapter(DeviceAdapter):
         else:
             base_pv = 0.0
 
-        # 加入天气扰动（全天候）
         cloud_factor = 0.85 + self._random.uniform(0, 0.30)
         base_pv = base_pv * cloud_factor
         base_pv = max(0.0, round(base_pv, 2))
 
-        # ===== 计算总负荷（基于日负荷曲线） =====
         base_load = (
             58.0
             + 12.0 * math.sin((hour - 8.0) / 24.0 * 2.0 * math.pi)
@@ -229,7 +231,6 @@ class SimulatorAdapter(DeviceAdapter):
         )
         base_load = max(30.0, round(base_load, 2))
 
-        # ===== 更新各设备 =====
         self._update_pv_units(base_pv)
         self._update_chargers(base_load)
         self._update_grid()
@@ -241,22 +242,18 @@ class SimulatorAdapter(DeviceAdapter):
             return self._state.model_copy(deep=True)
 
     def get_pv_units(self) -> List[DeviceRuntimeState]:
-        """获取 5 路 PV 状态（用于外部查询）"""
         with self._lock:
             return [pv.model_copy(deep=True) for pv in self._pv_units]
 
     def get_chargers(self) -> List[DeviceRuntimeState]:
-        """获取 5 个充电桩状态（用于外部查询）"""
         with self._lock:
             return [c.model_copy(deep=True) for c in self._chargers]
 
     def get_battery(self) -> DeviceRuntimeState:
-        """获取 Battery 状态（用于外部查询）"""
         with self._lock:
             return self._battery.model_copy(deep=True)
 
     def get_grid(self) -> DeviceRuntimeState:
-        """获取 Grid 状态（用于外部查询）"""
         with self._lock:
             return self._grid.model_copy(deep=True)
 
@@ -264,7 +261,6 @@ class SimulatorAdapter(DeviceAdapter):
         with self._lock:
             target = max(-10.0, min(10.0, decision.storage_power_target))
 
-            # 正值表示放电，负值表示充电
             delta_soc = (
                 -target
                 * self._simulation_step_hours
@@ -274,18 +270,15 @@ class SimulatorAdapter(DeviceAdapter):
             current_soc = self._battery.soc or 50.0
             new_soc = max(0.0, min(100.0, current_soc + delta_soc))
 
-            # 达到边界时不再继续充放电
             if new_soc <= 0.0 and target > 0:
                 target = 0.0
             if new_soc >= 100.0 and target < 0:
                 target = 0.0
 
-            # 更新 Battery 功率和 SOC
             self._battery.power_kw = round(target, 2)
             self._battery.soc = round(new_soc, 2)
             self._battery.timestamp = self._timestamp
 
-            # 重新计算 Grid
             self._update_grid()
             self._update_aggregate_state()
 
@@ -293,6 +286,7 @@ class SimulatorAdapter(DeviceAdapter):
 
     def set_charger_enabled(self, device_code: str, enabled: bool) -> bool:
         """设置充电桩启用/禁用（用于手动控制）"""
+        print(f"[Simulator] set_charger_enabled: {device_code} -> {enabled}")
         with self._lock:
             for charger in self._chargers:
                 if charger.device_code == device_code:
@@ -306,10 +300,11 @@ class SimulatorAdapter(DeviceAdapter):
                         charger.status = "idle"
                         charger.connected = False
                     charger.timestamp = self._timestamp
-                    # 重新计算 Grid 和聚合状态
                     self._update_grid()
                     self._update_aggregate_state()
+                    print(f"[Simulator] ✅ 已更新: {device_code} -> enabled={charger.enabled}, power={charger.power_kw}")
                     return True
+            print(f"[Simulator] ❌ 未找到设备: {device_code}")
             return False
 
     def reset(self) -> SystemState:
@@ -318,7 +313,6 @@ class SimulatorAdapter(DeviceAdapter):
             self._simulated_hour = 6.0
             self._timestamp = datetime.now()
 
-            # 重置 PV
             for pv in self._pv_units:
                 pv.power_kw = 0.0
                 pv.current_a = 0.0
@@ -326,7 +320,6 @@ class SimulatorAdapter(DeviceAdapter):
                 pv.is_online = True
                 pv.quality = "good"
 
-            # 重置充电桩
             for charger in self._chargers:
                 charger.power_kw = 0.0
                 charger.current_a = 0.0
@@ -337,7 +330,6 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.is_online = True
                 charger.quality = "good"
 
-            # 重置 Battery
             self._battery.power_kw = 0.0
             self._battery.soc = 50.0
             self._battery.timestamp = self._timestamp
@@ -345,7 +337,6 @@ class SimulatorAdapter(DeviceAdapter):
             self._battery.quality = "good"
             self._battery.alarm = False
 
-            # 重置 Grid
             self._grid.power_kw = 0.0
             self._grid.current_a = 0.0
             self._grid.timestamp = self._timestamp
