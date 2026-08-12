@@ -236,9 +236,60 @@ class SimulatorAdapter(DeviceAdapter):
         self._update_grid()
         self._update_aggregate_state()
 
+    # ==================== A-04: 保存设备遥测 ====================
+    def _save_device_history(self) -> None:
+        """保存所有设备的历史记录到 device_telemetry 表"""
+        try:
+            from app.database import Database
+            from app.config import Settings
+            from app.models import Device, DeviceTelemetry
+
+            settings = Settings.from_env()
+            db = Database(settings.database_url)
+
+            with db.session() as session:
+                devices = session.query(Device).all()
+                if not devices:
+                    return
+
+                for device in devices:
+                    # 根据设备类型从当前状态提取数据
+                    if device.device_type == "pv":
+                        unit = next((u for u in self._pv_units if u.device_code == device.device_code), None)
+                        power_kw = unit.power_kw if unit else 0.0
+                        storage_soc = None
+                    elif device.device_type == "charger":
+                        unit = next((c for c in self._chargers if c.device_code == device.device_code), None)
+                        power_kw = unit.power_kw if unit else 0.0
+                        storage_soc = None
+                    elif device.device_type in ("storage", "battery"):
+                        power_kw = self._battery.power_kw
+                        storage_soc = self._battery.soc
+                    elif device.device_type == "grid":
+                        power_kw = self._grid.power_kw
+                        storage_soc = None
+                    else:
+                        continue
+
+                    history = DeviceTelemetry(
+                        device_code=device.device_code,
+                        device_type=device.device_type,
+                        power_kw=power_kw,
+                        soc=storage_soc,  # ← 修正字段名
+                        quality='good',  # ← 直接赋值
+                    )
+                    session.add(history)
+
+                session.commit()
+                print(f"[Simulator] ✅ 已保存 {len(devices)} 条遥测记录")
+        except Exception as e:
+            print(f"[Simulator] ❌ 保存设备历史失败: {e}")
+
     def read_state(self) -> SystemState:
         with self._lock:
             self._next_environment()
+            # ===== 新增：保存设备遥测 =====
+            self._save_device_history()
             return self._state.model_copy(deep=True)
 
     def get_pv_units(self) -> List[DeviceRuntimeState]:
