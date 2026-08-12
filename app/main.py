@@ -55,10 +55,14 @@ def create_app(
         app.state.database = database
         app.state.service = service
 
-        # 4. 启动时先执行一次，保证页面第一次访问就有数据
+        # 4. B-09: 将设备端口暴露给 API 使用
+        app.state.device_read_port = device
+        app.state.device_execution_port = device
+
+        # 5. 启动时先执行一次，保证页面第一次访问就有数据
         await service.run_cycle()
 
-        # 5. 启动后台循环任务
+        # 6. 启动后台循环任务
         if start_background:
             await service.start()
 
@@ -100,6 +104,15 @@ def create_app(
             request=request,
             name="devices.html",
             context={"project_name": "设备管理"},
+        )
+
+    # ========== 设备详情页面路由（新增，A-10） ==========
+    @app.get("/devices/{device_id}", response_class=HTMLResponse)
+    async def device_detail(request: Request, device_id: int):
+        return templates.TemplateResponse(
+            request=request,
+            name="device_detail.html",
+            context={"request": request, "device_id": device_id},
         )
 
     # ========== 策略配置页面路由（B 部分） ==========
