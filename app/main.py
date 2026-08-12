@@ -106,6 +106,15 @@ def create_app(
             context={"project_name": "设备管理"},
         )
 
+    # ========== 设备详情页面路由（新增，A-10） ==========
+    @app.get("/devices/{device_id}", response_class=HTMLResponse)
+    async def device_detail(request: Request, device_id: int):
+        return templates.TemplateResponse(
+            request=request,
+            name="device_detail.html",
+            context={"request": request, "device_id": device_id},
+        )
+
     # ========== 策略配置页面路由（B 部分） ==========
     @app.get("/strategy", response_class=HTMLResponse)
     async def strategy_page(request: Request):
