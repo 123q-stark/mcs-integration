@@ -18,10 +18,11 @@ from app.schemas.strategy import (
     PriceConfigUpdate,
     GridStrategyConfigResponse,
     GridStrategyConfigUpdate,
-    ModeResponse,           # 新增 B-06
-    ModeUpdate,             # 新增 B-06
+    ModeResponse,
+    ModeUpdate,
 )
 from app.services.strategy_service import StrategyService
+from app.services.strategy_runtime_service import StrategyRuntimeService  # B-09 新增
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
@@ -275,13 +276,76 @@ async def update_mode(
         if config is None:
             raise HTTPException(status_code=404, detail="未找到策略配置")
         
-        # 更新 requested_mode
         config.requested_mode = update_data.requested_mode
         db.commit()
         db.refresh(config)
         
         return ModeResponse(
             requested_mode=config.requested_mode,
-            effective_mode=config.requested_mode,  # v1.2 暂时与 requested 一致
+            effective_mode=config.requested_mode,
             updated_at=config.updated_at,
         )
+
+
+# ============ 策略运行 API（B-09） ============
+
+@router.post("/run")
+async def run_strategy(request: Request):
+    """
+    执行一次完整的策略运行周期
+    返回决策结果和执行状态
+    """
+    try:
+        database = request.app.state.database
+        
+        # 获取设备端口（如果已设置）
+        device_read_port = getattr(request.app.state, 'device_read_port', None)
+        device_execution_port = getattr(request.app.state, 'device_execution_port', None)
+        
+        # 创建运行时服务
+        runtime = StrategyRuntimeService(
+            db=database,
+            device_read_port=device_read_port,
+            device_execution_port=device_execution_port,
+        )
+        
+        result = runtime.run_cycle()
+        
+        if result.get("success"):
+            return {
+                "status": "success",
+                "effective_mode": result.get("effective_mode"),
+                "fallback_used": result.get("fallback_used"),
+                "decision": {
+                    "storage_power_target": result["decision"].storage_power_target,
+                    "action": result["decision"].action,
+                    "message": result["decision"].message,
+                    "source": result["decision"].source,
+                },
+                "execution": {
+                    "success": result["execution"].success,
+                    "storage_power_actual_kw": result["execution"].storage_power_actual_kw,
+                    "message": result["execution"].message,
+                },
+                "run_id": result.get("run_id"),
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "策略运行失败"))
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("策略运行失败")
+        raise HTTPException(status_code=500, detail=f"策略运行失败: {str(e)}")
+
+
+@router.get("/runtime")
+async def get_runtime_status(request: Request):
+    """
+    获取当前运行时状态
+    """
+    database = request.app.state.database
+    # 创建一个临时服务实例以获取状态（不执行运行）
+    runtime = StrategyRuntimeService(database)
+    status = runtime.get_current_status()
+    return status
