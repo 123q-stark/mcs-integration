@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.repositories.price_repository import PriceRepository
 from app.repositories.grid_strategy_repository import GridStrategyRepository
-from app.repositories.strategy_device_repository import StrategyDeviceRepository  # 新增导入
+from app.repositories.strategy_device_repository import StrategyDeviceRepository
 from app.schemas.strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
@@ -18,6 +18,8 @@ from app.schemas.strategy import (
     PriceConfigUpdate,
     GridStrategyConfigResponse,
     GridStrategyConfigUpdate,
+    ModeResponse,           # 新增 B-06
+    ModeUpdate,             # 新增 B-06
 )
 from app.services.strategy_service import StrategyService
 
@@ -234,3 +236,52 @@ async def update_device_config(
             "strategy_power_limit_kw": config.strategy_power_limit_kw,
             "priority": config.priority,
         }
+
+
+# ============ 模式切换 API（B-06） ============
+
+@router.get("/mode", response_model=ModeResponse)
+async def get_mode(request: Request):
+    """
+    获取当前模式（requested_mode 和 effective_mode）
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        from app.repositories.strategy_repository import StrategyRepository
+        repo = StrategyRepository(db)
+        config = repo.get_active_config()
+        if config is None:
+            raise HTTPException(status_code=404, detail="未找到策略配置")
+        return ModeResponse(
+            requested_mode=config.requested_mode,
+            effective_mode=config.requested_mode,  # v1.2 暂时与 requested 一致
+            updated_at=config.updated_at,
+        )
+
+
+@router.put("/mode", response_model=ModeResponse)
+async def update_mode(
+    request: Request,
+    update_data: ModeUpdate,
+):
+    """
+    更新请求模式（requested_mode）
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        from app.repositories.strategy_repository import StrategyRepository
+        repo = StrategyRepository(db)
+        config = repo.get_active_config()
+        if config is None:
+            raise HTTPException(status_code=404, detail="未找到策略配置")
+        
+        # 更新 requested_mode
+        config.requested_mode = update_data.requested_mode
+        db.commit()
+        db.refresh(config)
+        
+        return ModeResponse(
+            requested_mode=config.requested_mode,
+            effective_mode=config.requested_mode,  # v1.2 暂时与 requested 一致
+            updated_at=config.updated_at,
+        )
