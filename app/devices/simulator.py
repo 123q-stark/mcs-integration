@@ -378,3 +378,20 @@ class SimulatorAdapter(DeviceAdapter):
             storage_power=storage,
             storage_soc=soc,
         )
+
+    def execute(self, decision):
+        """
+        执行控制决策（临时实现，用于 B-09 测试）
+        """
+        from app.schemas import ControlExecutionResult
+        from datetime import datetime
+        
+        # 模拟执行：假设成功
+        return ControlExecutionResult(
+            decision_id=getattr(decision, 'decision_id', None),
+            success=True,
+            storage_power_actual_kw=decision.storage_power_target,
+            charger_results=[],
+            message="模拟执行成功（临时实现）",
+            executed_at=datetime.now(),
+        )
