@@ -354,14 +354,19 @@ class SimulatorAdapter(DeviceAdapter):
 
             self._update_aggregate_state()
             return self._state.model_copy(deep=True)
+
+    # ============================================================
+    # ⚠️ 临时方法（B-09 测试用）- 等待 A 正式实现后删除
+    # 正式实现应由 A 在 A-05/A-08 中完成
+    # 预计删除时间：A 完成正式实现后
+    # ============================================================
     def get_system_state(self):
         """获取当前系统状态（临时实现，用于 B-09 测试）"""
         from app.schemas import SystemState
         from datetime import datetime
-        
+
         # 尝试从 Simulator 获取真实数据，如果没有则返回默认值
         try:
-            # 如果有内部状态变量，读取它们
             pv = getattr(self, 'pv_power', 0.0)
             load = getattr(self, 'load_power', 0.0)
             storage = getattr(self, 'storage_power', 0.0)
@@ -369,7 +374,7 @@ class SimulatorAdapter(DeviceAdapter):
             hour = getattr(self, 'simulated_hour', 12.0)
         except:
             pv, load, storage, soc, hour = 0.0, 0.0, 0.0, 50.0, 12.0
-        
+
         return SystemState(
             timestamp=datetime.now(),
             simulated_hour=hour,
@@ -379,14 +384,16 @@ class SimulatorAdapter(DeviceAdapter):
             storage_soc=soc,
         )
 
+    # ============================================================
+    # ⚠️ 临时方法（B-09 测试用）- 等待 A 正式实现后删除
+    # 正式实现应由 A 在 A-08 中完成
+    # 预计删除时间：A 完成正式实现后
+    # ============================================================
     def execute(self, decision):
-        """
-        执行控制决策（临时实现，用于 B-09 测试）
-        """
+        """执行控制决策（临时实现，用于 B-09 测试）"""
         from app.schemas import ControlExecutionResult
         from datetime import datetime
-        
-        # 模拟执行：假设成功
+
         return ControlExecutionResult(
             decision_id=getattr(decision, 'decision_id', None),
             success=True,
