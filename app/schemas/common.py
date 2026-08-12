@@ -23,6 +23,10 @@ class ControlDecision(BaseModel):
     action: str
     message: str
     created_at: datetime
+    source: str = "fixed_rule"
+    mode: str = "PV_PRIORITY"
+    decision_id: str | None = None
+    charger_targets: list[dict] = []
 
 
 class StatusResponse(BaseModel):
@@ -60,3 +64,13 @@ class CommandItem(BaseModel):
 class ResetResponse(BaseModel):
     success: bool
     message: str
+
+
+class ControlExecutionResult(BaseModel):
+    """控制执行结果"""
+    decision_id: str | None = None
+    success: bool
+    storage_power_actual_kw: float
+    charger_results: list[dict] = []
+    message: str
+    executed_at: datetime
