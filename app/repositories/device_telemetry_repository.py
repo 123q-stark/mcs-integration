@@ -3,7 +3,7 @@
 """
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy import desc
 from app.models.device_telemetry import DeviceTelemetry
 
 
@@ -40,23 +40,6 @@ class DeviceTelemetryRepository:
         records = (
             self.db.query(DeviceTelemetry)
             .filter(DeviceTelemetry.device_code == device_code)
-            .order_by(desc(DeviceTelemetry.created_at))
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-        return list(reversed(records))  # 升序返回
-
-    def get_history_by_device_type(
-        self,
-        device_type: str,
-        limit: int = 96,
-        offset: int = 0,
-    ) -> List[DeviceTelemetry]:
-        """按设备类型获取历史数据"""
-        records = (
-            self.db.query(DeviceTelemetry)
-            .filter(DeviceTelemetry.device_type == device_type)
             .order_by(desc(DeviceTelemetry.created_at))
             .offset(offset)
             .limit(limit)
