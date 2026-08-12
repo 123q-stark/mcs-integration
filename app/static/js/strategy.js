@@ -258,3 +258,84 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }, 500);
 });
+
+
+// ============ v1.3 预测曲线 ============
+let loadChart = null;
+let pvChart = null;
+
+async function fetchForecast() {
+    try {
+        // 获取负荷预测
+        const loadRes = await fetch('/api/strategies/forecast/load');
+        const loadData = await loadRes.json();
+        
+        // 获取 PV 预测
+        const pvRes = await fetch('/api/strategies/forecast/pv');
+        const pvData = await pvRes.json();
+
+        // 提取时间标签和数值
+        const labels = loadData.points.map(p => {
+            const dt = new Date(p.timestamp);
+            return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        });
+        const loadValues = loadData.points.map(p => p.value_kw);
+        const pvValues = pvData.points.map(p => p.value_kw);
+
+        // 更新图表
+        updateChart('loadForecastChart', '负荷预测 (kW)', labels, loadValues, loadChart, '#4f8cf7');
+        updateChart('pvForecastChart', 'PV 预测 (kW)', labels, pvValues, pvChart, '#f59e0b');
+
+        // 更新时间
+        document.getElementById('forecastTime').textContent = '更新于: ' + new Date().toLocaleString();
+
+    } catch (error) {
+        console.error('获取预测失败:', error);
+        showToast('获取预测失败，请检查服务', 'error');
+    }
+}
+
+function updateChart(canvasId, label, labels, values, chartInstance, color) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    const newChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: label,
+                data: values,
+                borderColor: color,
+                backgroundColor: color + '33',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: { ticks: { maxTicksLimit: 24, autoSkip: true } },
+                y: { beginAtZero: true }
+            }
+        }
+    });
+    // 保存实例引用
+    if (canvasId === 'loadForecastChart') {
+        loadChart = newChart;
+    } else if (canvasId === 'pvForecastChart') {
+        pvChart = newChart;
+    }
+}
+
+// 页面加载完成后自动获取预测
+document.addEventListener('DOMContentLoaded', function() {
+    // 延迟一点等图表容器渲染
+    setTimeout(fetchForecast, 500);
+});

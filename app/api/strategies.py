@@ -234,3 +234,104 @@ async def update_device_config(
             "strategy_power_limit_kw": config.strategy_power_limit_kw,
             "priority": config.priority,
         }
+
+
+
+
+# ============ 预测数据 API（v1.3） ============
+
+@router.get("/forecast/load")
+async def get_load_forecast(request: Request):
+    """
+    获取最新的负荷预测（96 点）
+    """
+    database = request.app.state.database
+    # 从数据库获取最近一条成功运行的预测数据
+    with database.session() as db:
+        from app.models.strategy_run import StrategyRunModel
+        import json
+        record = db.query(StrategyRunModel).filter(
+            StrategyRunModel.load_forecast_json.isnot(None)
+        ).order_by(StrategyRunModel.created_at.desc()).first()
+        if record and record.load_forecast_json:
+            points = json.loads(record.load_forecast_json)
+            # 转换为 ForecastResult 格式
+            return {
+                "model_name": "XGBoost",
+                "target": "load",
+                "created_at": record.created_at.isoformat(),
+                "step_minutes": 15,
+                "points": points,
+                "mae": None,
+                "rmse": None
+            }
+    # 如果没有历史数据，返回模拟预测（用于演示）
+    from datetime import datetime, timedelta
+    from app.schemas.algorithm import ForecastPoint
+    import math
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    points = []
+    for i in range(96):
+        dt = now + timedelta(minutes=15*i)
+        # 模拟负荷曲线：峰时高、谷时低
+        hour = dt.hour
+        base = 50 + 20 * math.sin((hour - 8) / 24 * 2 * math.pi)
+        val = max(10, base + 5 * math.sin(i/96 * 2 * math.pi))
+        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+    return {
+        "model_name": "Simulated",
+        "target": "load",
+        "created_at": datetime.now().isoformat(),
+        "step_minutes": 15,
+        "points": points,
+        "mae": None,
+        "rmse": None
+    }
+
+
+@router.get("/forecast/pv")
+async def get_pv_forecast(request: Request):
+    """
+    获取最新的 PV 预测（96 点）
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        from app.models.strategy_run import StrategyRunModel
+        import json
+        record = db.query(StrategyRunModel).filter(
+            StrategyRunModel.pv_forecast_json.isnot(None)
+        ).order_by(StrategyRunModel.created_at.desc()).first()
+        if record and record.pv_forecast_json:
+            points = json.loads(record.pv_forecast_json)
+            return {
+                "model_name": "XGBoost",
+                "target": "pv",
+                "created_at": record.created_at.isoformat(),
+                "step_minutes": 15,
+                "points": points,
+                "mae": None,
+                "rmse": None
+            }
+    # 模拟 PV 预测
+    from datetime import datetime, timedelta
+    import math
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    points = []
+    for i in range(96):
+        dt = now + timedelta(minutes=15*i)
+        hour = dt.hour
+        if 6 <= hour <= 18:
+            pos = (hour - 6) / 12
+            val = 80 * math.sin(math.pi * pos)
+        else:
+            val = 0
+        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+    return {
+        "model_name": "Simulated",
+        "target": "pv",
+        "created_at": datetime.now().isoformat(),
+        "step_minutes": 15,
+        "points": points,
+        "mae": None,
+        "rmse": None
+    }
