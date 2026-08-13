@@ -69,3 +69,12 @@ class CommandItem(BaseModel):
 class ResetResponse(BaseModel):
     success: bool
     message: str
+
+class ControlExecutionResult(BaseModel):
+    """控制执行结果"""
+    decision_id: str | None = None
+    success: bool
+    storage_power_actual_kw: float
+    charger_results: list[dict] = []
+    message: str
+    executed_at: datetime
