@@ -419,12 +419,10 @@ class SimulatorAdapter(DeviceAdapter):
         """
         推进一个仿真步长（15min），同时应用控制决策。
 
-        用于 A11 批量历史生成：每个时间步更新环境 + 应用控制。
-        不自动保存历史（由调用方批量保存以提升性能）。
-
-        Args:
-            storage_power_target: 储能目标功率（正=放电，负=充电）
-            charger_targets: 充电桩控制列表，格式 [{"device_code": "CHG001", "enabled": bool}]
+        支持：
+        - storage_power_target: 储能目标功率（正=放电，负=充电）
+        - charger_targets: 充电桩控制列表（A-8 新增 power_limit_kw 支持）
+            格式: [{"device_code": "CHG001", "enabled": bool, "power_limit_kw": float}]
 
         Returns:
             SystemState: 更新后的系统状态
@@ -454,25 +452,44 @@ class SimulatorAdapter(DeviceAdapter):
                 self._battery.soc = round(new_soc, 2)
                 self._battery.timestamp = self._timestamp
 
-            # 3. 应用充电桩控制（若有）
+            # 3. 应用充电桩控制（A-8 新增 power_limit_kw 支持）
             if charger_targets:
                 for ct in charger_targets:
                     device_code = ct.get("device_code")
-                    enabled = ct.get("enabled")
-                    if device_code and enabled is not None:
-                        for charger in self._chargers:
-                            if charger.device_code == device_code:
-                                charger.enabled = enabled
-                                if not enabled:
-                                    charger.power_kw = 0.0
-                                    charger.status = "disabled"
-                                    charger.current_a = 0.0
-                                    charger.connected = False
-                                else:
-                                    charger.status = "idle"
-                                    charger.connected = False
-                                charger.timestamp = self._timestamp
-                                break
+                    if not device_code:
+                        continue
+
+                    for charger in self._chargers:
+                        if charger.device_code != device_code:
+                            continue
+
+                        # 处理 enabled
+                        enabled = ct.get("enabled")
+                        if enabled is not None:
+                            charger.enabled = enabled
+                            if not enabled:
+                                charger.power_kw = 0.0
+                                charger.status = "disabled"
+                                charger.current_a = 0.0
+                                charger.connected = False
+                            else:
+                                charger.status = "idle"
+                                charger.connected = False
+
+                        # 处理 power_limit_kw（A-8 新增）
+                        power_limit = ct.get("power_limit_kw")
+                        if power_limit is not None and charger.enabled:
+                            # 限制当前功率不超过设定上限
+                            if charger.power_kw > power_limit:
+                                charger.power_kw = power_limit
+                                # 重新计算电流
+                                if charger.voltage_v and charger.voltage_v > 0:
+                                    charger.current_a = round(
+                                        charger.power_kw / charger.voltage_v * 1000, 2
+                                    )
+
+                        charger.timestamp = self._timestamp
+                        break
 
             # 4. 更新电网（功率平衡）
             self._update_grid()

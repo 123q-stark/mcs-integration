@@ -280,12 +280,14 @@ def get_telemetry_repo(db: Session = Depends(get_db)) -> DeviceTelemetryReposito
 def get_runtime_service(
     request: Request,
     telemetry_repo: DeviceTelemetryRepository = Depends(get_telemetry_repo),
+    db: Session = Depends(get_db),
 ) -> DeviceRuntimeService:
     """
-    获取设备运行时服务
+    获取设备运行时服务（A-8 新增 strategy_repo 依赖）
     依赖：
     - request.app.state.service.device (SimulatorAdapter)
     - telemetry_repo (DeviceTelemetryRepository)
+    - strategy_repo (StrategyRepository)
     """
     ems_service = request.app.state.service
     if ems_service is None:
@@ -299,8 +301,9 @@ def get_runtime_service(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="模拟器尚未初始化",
         )
-    return DeviceRuntimeService(simulator, telemetry_repo)
-
+    from app.repositories.strategy_repository import StrategyRepository
+    strategy_repo = StrategyRepository(db)
+    return DeviceRuntimeService(simulator, telemetry_repo, strategy_repo)
 
 @router.post("/simulator/generate-history")
 def generate_history(
