@@ -556,3 +556,19 @@ class SimulatorAdapter(DeviceAdapter):
                     return True
             print(f"[Simulator] ❌ 未找到设备: {device_code}")
             return False
+    def execute(self, decision):
+        """执行控制决策（实现 DeviceExecutionPort 接口）"""
+        from app.schemas import ControlExecutionResult
+        from datetime import datetime
+        
+        # 调用现有的 execute_command 方法
+        self.execute_command(decision)
+        
+        return ControlExecutionResult(
+            decision_id=getattr(decision, 'decision_id', None),
+            success=True,
+            storage_power_actual_kw=decision.storage_power_target,
+            charger_results=[],
+            message="执行成功",
+            executed_at=datetime.now(),
+        )
