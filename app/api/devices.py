@@ -257,3 +257,89 @@ def control_device(
         "device_code": device.device_code,
         "command": control_req.command,
     }
+
+
+# ==================== A-11: 快速历史生成 ====================
+from pydantic import BaseModel, Field
+from app.services.device_runtime_service import DeviceRuntimeService
+from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
+import os
+
+
+class GenerateHistoryRequest(BaseModel):
+    """快速历史生成请求"""
+    days: int = Field(30, ge=1, le=365, description="生成天数（1~365）")
+    seed: int = Field(2026, description="随机种子，确保可复现")
+
+
+def get_telemetry_repo(db: Session = Depends(get_db)) -> DeviceTelemetryRepository:
+    """获取设备遥测 Repository"""
+    return DeviceTelemetryRepository(db)
+
+
+def get_runtime_service(
+    request: Request,
+    telemetry_repo: DeviceTelemetryRepository = Depends(get_telemetry_repo),
+) -> DeviceRuntimeService:
+    """
+    获取设备运行时服务
+    依赖：
+    - request.app.state.service.device (SimulatorAdapter)
+    - telemetry_repo (DeviceTelemetryRepository)
+    """
+    ems_service = request.app.state.service
+    if ems_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="EMS 服务尚未初始化",
+        )
+    simulator = ems_service.device
+    if simulator is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="模拟器尚未初始化",
+        )
+    return DeviceRuntimeService(simulator, telemetry_repo)
+
+
+@router.post("/simulator/generate-history")
+def generate_history(
+    req: GenerateHistoryRequest,
+    service: DeviceRuntimeService = Depends(get_runtime_service),
+):
+    """
+    快速生成历史数据（仅 Simulator 阶段可用）
+
+    生成指定天数的历史遥测数据，每个时刻包含 12 个逻辑设备的状态。
+    使用固定随机种子确保可复现。
+
+    - **days**: 生成天数（默认 30，最大 365）
+    - **seed**: 随机种子（默认 2026）
+
+    生成数据包括：
+    - 每个时刻 12 个逻辑设备（5 PV + 5 Charger + 1 Battery + 1 Grid）的遥测记录
+    - 功率平衡（grid = load - pv - storage）
+    - SOC 合理递推
+
+    返回：
+    - success: 是否成功
+    - total_steps: 生成的总时刻数
+    - total_records: 生成的遥测记录总数（= total_steps * 12）
+    - message: 结果描述
+    """
+    # 仅允许开发/Simulator 模式
+    env = os.getenv("ENV", "development")
+    if env not in ("development", "test", "simulator"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"历史生成接口仅在开发/Simulator 模式下可用（当前 ENV={env}）",
+        )
+
+    try:
+        result = service.generate_history(req.days, req.seed)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"生成历史数据失败: {str(e)}",
+        )

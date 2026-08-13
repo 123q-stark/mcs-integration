@@ -4,7 +4,7 @@ import math
 import random
 import threading
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from app.devices.base import DeviceAdapter
 from app.schemas import ControlDecision, SystemState
@@ -236,9 +236,12 @@ class SimulatorAdapter(DeviceAdapter):
         self._update_grid()
         self._update_aggregate_state()
 
-    # ==================== A-04: 保存设备遥测 ====================
+    # ==================== A-04: 保存设备遥测（完整字段） ====================
     def _save_device_history(self) -> None:
-        """保存所有设备的历史记录到 device_telemetry 表"""
+        """
+        保存所有设备的历史记录到 device_telemetry 表（完整字段）
+        修改于 A-11：补充 voltage_v、current_a、temperature_c、energy_kwh、status、enabled 等字段
+        """
         try:
             from app.database import Database
             from app.config import Settings
@@ -252,43 +255,239 @@ class SimulatorAdapter(DeviceAdapter):
                 if not devices:
                     return
 
+                records = []
                 for device in devices:
                     # 根据设备类型从当前状态提取数据
                     if device.device_type == "pv":
                         unit = next((u for u in self._pv_units if u.device_code == device.device_code), None)
-                        power_kw = unit.power_kw if unit else 0.0
-                        storage_soc = None
+                        if not unit:
+                            continue
+                        records.append(DeviceTelemetry(
+                            device_code=device.device_code,
+                            device_type=device.device_type,
+                            power_kw=unit.power_kw,
+                            voltage_v=unit.voltage_v,
+                            current_a=unit.current_a,
+                            temperature_c=unit.temperature_c,
+                            energy_kwh=unit.energy_kwh,
+                            soc=None,
+                            soh=None,
+                            enabled=None,
+                            status=None,
+                            quality=unit.quality or "good",
+                        ))
                     elif device.device_type == "charger":
                         unit = next((c for c in self._chargers if c.device_code == device.device_code), None)
-                        power_kw = unit.power_kw if unit else 0.0
-                        storage_soc = None
+                        if not unit:
+                            continue
+                        records.append(DeviceTelemetry(
+                            device_code=device.device_code,
+                            device_type=device.device_type,
+                            power_kw=unit.power_kw,
+                            voltage_v=unit.voltage_v,
+                            current_a=unit.current_a,
+                            temperature_c=None,
+                            energy_kwh=unit.energy_kwh,
+                            soc=None,
+                            soh=None,
+                            enabled=unit.enabled,
+                            status=unit.status,
+                            quality=unit.quality or "good",
+                        ))
                     elif device.device_type in ("storage", "battery"):
-                        power_kw = self._battery.power_kw
-                        storage_soc = self._battery.soc
+                        records.append(DeviceTelemetry(
+                            device_code=device.device_code,
+                            device_type=device.device_type,
+                            power_kw=self._battery.power_kw,
+                            voltage_v=self._battery.voltage_v,
+                            current_a=self._battery.current_a,
+                            temperature_c=self._battery.temperature_c,
+                            energy_kwh=self._battery.energy_kwh,
+                            soc=self._battery.soc,
+                            soh=self._battery.soh,
+                            enabled=None,
+                            status=None,
+                            quality=self._battery.quality or "good",
+                        ))
                     elif device.device_type == "grid":
-                        power_kw = self._grid.power_kw
-                        storage_soc = None
-                    else:
-                        continue
+                        records.append(DeviceTelemetry(
+                            device_code=device.device_code,
+                            device_type=device.device_type,
+                            power_kw=self._grid.power_kw,
+                            voltage_v=self._grid.voltage_v,
+                            current_a=self._grid.current_a,
+                            temperature_c=None,
+                            energy_kwh=self._grid.energy_kwh,
+                            soc=None,
+                            soh=None,
+                            enabled=None,
+                            status=None,
+                            quality=self._grid.quality or "good",
+                        ))
 
-                    history = DeviceTelemetry(
-                        device_code=device.device_code,
-                        device_type=device.device_type,
-                        power_kw=power_kw,
-                        soc=storage_soc,  # ← 修正字段名
-                        quality='good',  # ← 直接赋值
-                    )
-                    session.add(history)
-
-                session.commit()
-                print(f"[Simulator] ✅ 已保存 {len(devices)} 条遥测记录")
+                if records:
+                    session.add_all(records)
+                    session.commit()
+                    print(f"[Simulator] ✅ 已保存 {len(records)} 条遥测记录")
         except Exception as e:
             print(f"[Simulator] ❌ 保存设备历史失败: {e}")
+
+    # ==================== A-11: 新增方法 ====================
+
+    def reset(self, seed: Optional[int] = None) -> SystemState:
+        """
+        重置模拟器到初始状态
+
+        Args:
+            seed: 随机种子（默认 None 表示使用 2026）
+        """
+        with self._lock:
+            if seed is not None:
+                self._random.seed(seed)
+            else:
+                self._random.seed(2026)
+
+            self._simulated_hour = 6.0
+            self._timestamp = datetime.now()
+
+            for pv in self._pv_units:
+                pv.power_kw = 0.0
+                pv.current_a = 0.0
+                pv.voltage_v = 220.0 + self._random.uniform(-5, 5)
+                pv.temperature_c = 25.0 + self._random.uniform(-3, 3)
+                pv.energy_kwh = 0.0
+                pv.timestamp = self._timestamp
+                pv.is_online = True
+                pv.quality = "good"
+
+            for charger in self._chargers:
+                charger.power_kw = 0.0
+                charger.current_a = 0.0
+                charger.enabled = True
+                charger.status = "idle"
+                charger.connected = False
+                charger.energy_kwh = 0.0
+                charger.timestamp = self._timestamp
+                charger.is_online = True
+                charger.quality = "good"
+
+            self._battery.power_kw = 0.0
+            self._battery.soc = 50.0
+            self._battery.soh = 98.0
+            self._battery.energy_kwh = 200.0
+            self._battery.timestamp = self._timestamp
+            self._battery.is_online = True
+            self._battery.quality = "good"
+            self._battery.alarm = False
+
+            self._grid.power_kw = 0.0
+            self._grid.current_a = 0.0
+            self._grid.energy_kwh = 0.0
+            self._grid.timestamp = self._timestamp
+            self._grid.is_online = True
+            self._grid.quality = "good"
+
+            self._update_aggregate_state()
+            return self._state.model_copy(deep=True)
+
+    def get_state_without_advance(self) -> SystemState:
+        """获取当前系统状态（不推进时间）"""
+        with self._lock:
+            return self._state.model_copy(deep=True)
+
+    def get_all_devices_state(self) -> List[DeviceRuntimeState]:
+        """获取所有 12 个设备的当前状态列表"""
+        with self._lock:
+            result = []
+            # 5 路 PV
+            for pv in self._pv_units:
+                result.append(pv.model_copy(deep=True))
+            # 5 个充电桩
+            for c in self._chargers:
+                result.append(c.model_copy(deep=True))
+            # Battery
+            result.append(self._battery.model_copy(deep=True))
+            # Grid
+            result.append(self._grid.model_copy(deep=True))
+            return result
+
+    def step_with_control(
+        self,
+        storage_power_target: float = 0.0,
+        charger_targets: Optional[List[dict]] = None,
+    ) -> SystemState:
+        """
+        推进一个仿真步长（15min），同时应用控制决策。
+
+        用于 A11 批量历史生成：每个时间步更新环境 + 应用控制。
+        不自动保存历史（由调用方批量保存以提升性能）。
+
+        Args:
+            storage_power_target: 储能目标功率（正=放电，负=充电）
+            charger_targets: 充电桩控制列表，格式 [{"device_code": "CHG001", "enabled": bool}]
+
+        Returns:
+            SystemState: 更新后的系统状态
+        """
+        with self._lock:
+            # 1. 推进环境（PV/负荷变化）
+            self._next_environment()
+
+            # 2. 应用储能控制
+            if storage_power_target != 0.0:
+                target = max(-10.0, min(10.0, storage_power_target))
+                delta_soc = (
+                    -target
+                    * self._simulation_step_hours
+                    / (self._battery.energy_kwh or 200.0)
+                    * 100.0
+                )
+                current_soc = self._battery.soc or 50.0
+                new_soc = max(0.0, min(100.0, current_soc + delta_soc))
+
+                if new_soc <= 0.0 and target > 0:
+                    target = 0.0
+                if new_soc >= 100.0 and target < 0:
+                    target = 0.0
+
+                self._battery.power_kw = round(target, 2)
+                self._battery.soc = round(new_soc, 2)
+                self._battery.timestamp = self._timestamp
+
+            # 3. 应用充电桩控制（若有）
+            if charger_targets:
+                for ct in charger_targets:
+                    device_code = ct.get("device_code")
+                    enabled = ct.get("enabled")
+                    if device_code and enabled is not None:
+                        for charger in self._chargers:
+                            if charger.device_code == device_code:
+                                charger.enabled = enabled
+                                if not enabled:
+                                    charger.power_kw = 0.0
+                                    charger.status = "disabled"
+                                    charger.current_a = 0.0
+                                    charger.connected = False
+                                else:
+                                    charger.status = "idle"
+                                    charger.connected = False
+                                charger.timestamp = self._timestamp
+                                break
+
+            # 4. 更新电网（功率平衡）
+            self._update_grid()
+
+            # 5. 更新聚合状态
+            self._update_aggregate_state()
+
+            return self._state.model_copy(deep=True)
+
+    # ==================== 以下为原接口保持不变 ====================
 
     def read_state(self) -> SystemState:
         with self._lock:
             self._next_environment()
-            # ===== 新增：保存设备遥测 =====
+            # 保存设备遥测
             self._save_device_history()
             return self._state.model_copy(deep=True)
 
@@ -357,42 +556,3 @@ class SimulatorAdapter(DeviceAdapter):
                     return True
             print(f"[Simulator] ❌ 未找到设备: {device_code}")
             return False
-
-    def reset(self) -> SystemState:
-        with self._lock:
-            self._random.seed(2026)
-            self._simulated_hour = 6.0
-            self._timestamp = datetime.now()
-
-            for pv in self._pv_units:
-                pv.power_kw = 0.0
-                pv.current_a = 0.0
-                pv.timestamp = self._timestamp
-                pv.is_online = True
-                pv.quality = "good"
-
-            for charger in self._chargers:
-                charger.power_kw = 0.0
-                charger.current_a = 0.0
-                charger.enabled = True
-                charger.status = "idle"
-                charger.connected = False
-                charger.timestamp = self._timestamp
-                charger.is_online = True
-                charger.quality = "good"
-
-            self._battery.power_kw = 0.0
-            self._battery.soc = 50.0
-            self._battery.timestamp = self._timestamp
-            self._battery.is_online = True
-            self._battery.quality = "good"
-            self._battery.alarm = False
-
-            self._grid.power_kw = 0.0
-            self._grid.current_a = 0.0
-            self._grid.timestamp = self._timestamp
-            self._grid.is_online = True
-            self._grid.quality = "good"
-
-            self._update_aggregate_state()
-            return self._state.model_copy(deep=True)
