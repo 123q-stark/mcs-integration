@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.repositories.price_repository import PriceRepository
 from app.repositories.grid_strategy_repository import GridStrategyRepository
-from app.repositories.strategy_device_repository import StrategyDeviceRepository  # 新增导入
+from app.repositories.strategy_device_repository import StrategyDeviceRepository
 from app.schemas.strategy import (
     StrategyConfigResponse,
     StrategyConfigUpdate,
@@ -18,8 +18,11 @@ from app.schemas.strategy import (
     PriceConfigUpdate,
     GridStrategyConfigResponse,
     GridStrategyConfigUpdate,
+    ModeResponse,
+    ModeUpdate,
 )
 from app.services.strategy_service import StrategyService
+from app.services.strategy_runtime_service import StrategyRuntimeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/strategies", tags=["strategies"])
@@ -29,29 +32,17 @@ router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 
 @router.get("/config", response_model=StrategyConfigResponse)
 async def get_strategy_config(request: Request):
-    """
-    获取当前激活的策略配置
-    """
     database = request.app.state.database
     with database.session() as db:
         strategy_service = StrategyService(db)
         config = strategy_service.get_current_config()
         if config is None:
-            raise HTTPException(
-                status_code=404,
-                detail="未找到策略配置，请先初始化默认配置"
-            )
+            raise HTTPException(status_code=404, detail="未找到策略配置")
         return config
 
 
 @router.put("/config", response_model=StrategyConfigResponse)
-async def update_strategy_config(
-    request: Request,
-    update_data: StrategyConfigUpdate,
-):
-    """
-    更新策略配置（完整更新）
-    """
+async def update_strategy_config(request: Request, update_data: StrategyConfigUpdate):
     try:
         database = request.app.state.database
         with database.session() as db:
@@ -61,20 +52,11 @@ async def update_strategy_config(
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("更新策略配置失败")
-        raise HTTPException(
-            status_code=500,
-            detail="策略配置保存失败，请检查服务器日志。",
-        )
+        raise HTTPException(status_code=500, detail="策略配置保存失败")
 
 
 @router.post("/preview", response_model=StrategyPreviewResponse)
-async def preview_strategy(
-    request: Request,
-    preview_data: StrategyPreviewRequest,
-):
-    """
-    预览策略决策
-    """
+async def preview_strategy(request: Request, preview_data: StrategyPreviewRequest):
     try:
         database = request.app.state.database
         with database.session() as db:
@@ -82,19 +64,13 @@ async def preview_strategy(
             return service.preview_decision(preview_data)
     except Exception as e:
         logger.exception("策略预览失败")
-        raise HTTPException(
-            status_code=500,
-            detail="策略预览失败，请检查输入或服务器日志。",
-        )
+        raise HTTPException(status_code=500, detail="策略预览失败")
 
 
 # ============ 电价配置 API（B-03） ============
 
 @router.get("/price-config", response_model=PriceConfigResponse)
 async def get_price_config(request: Request):
-    """
-    获取当前电价配置
-    """
     database = request.app.state.database
     with database.session() as db:
         repo = PriceRepository(db)
@@ -102,13 +78,7 @@ async def get_price_config(request: Request):
 
 
 @router.put("/price-config", response_model=PriceConfigResponse)
-async def update_price_config(
-    request: Request,
-    update_data: PriceConfigUpdate,
-):
-    """
-    更新电价配置（支持部分更新）
-    """
+async def update_price_config(request: Request, update_data: PriceConfigUpdate):
     try:
         database = request.app.state.database
         with database.session() as db:
@@ -120,19 +90,13 @@ async def update_price_config(
             )
     except Exception as e:
         logger.exception("更新电价配置失败")
-        raise HTTPException(
-            status_code=500,
-            detail="电价配置保存失败，请检查服务器日志。",
-        )
+        raise HTTPException(status_code=500, detail="电价配置保存失败")
 
 
 # ============ 电网策略配置 API（B-04） ============
 
 @router.get("/grid-config", response_model=GridStrategyConfigResponse)
 async def get_grid_config(request: Request):
-    """
-    获取当前电网策略配置
-    """
     database = request.app.state.database
     with database.session() as db:
         repo = GridStrategyRepository(db)
@@ -140,13 +104,7 @@ async def get_grid_config(request: Request):
 
 
 @router.put("/grid-config", response_model=GridStrategyConfigResponse)
-async def update_grid_config(
-    request: Request,
-    update_data: GridStrategyConfigUpdate,
-):
-    """
-    更新电网策略配置（支持部分更新）
-    """
+async def update_grid_config(request: Request, update_data: GridStrategyConfigUpdate):
     try:
         database = request.app.state.database
         with database.session() as db:
@@ -158,19 +116,13 @@ async def update_grid_config(
             )
     except Exception as e:
         logger.exception("更新电网策略配置失败")
-        raise HTTPException(
-            status_code=500,
-            detail="电网策略配置保存失败，请检查服务器日志。",
-        )
+        raise HTTPException(status_code=500, detail="电网策略配置保存失败")
 
 
 # ============ 设备策略配置 API（B-02） ============
 
 @router.get("/device-configs")
 async def get_device_configs(request: Request):
-    """
-    获取所有设备的策略配置（10条：PV001~PV005, CHG001~CHG005）
-    """
     database = request.app.state.database
     with database.session() as db:
         repo = StrategyDeviceRepository(db)
@@ -189,9 +141,6 @@ async def get_device_configs(request: Request):
 
 @router.get("/device-configs/{device_code}")
 async def get_device_config(request: Request, device_code: str):
-    """
-    获取单个设备的策略配置
-    """
     database = request.app.state.database
     with database.session() as db:
         repo = StrategyDeviceRepository(db)
@@ -208,19 +157,7 @@ async def get_device_config(request: Request, device_code: str):
 
 
 @router.put("/device-configs/{device_code}")
-async def update_device_config(
-    request: Request,
-    device_code: str,
-    update_data: dict,
-):
-    """
-    更新单个设备的策略配置
-    支持部分更新，可传入以下字段：
-        participate_in_strategy (bool)
-        allow_strategy_control (bool)
-        strategy_power_limit_kw (float, optional)
-        priority (int)
-    """
+async def update_device_config(request: Request, device_code: str, update_data: dict):
     database = request.app.state.database
     with database.session() as db:
         repo = StrategyDeviceRepository(db)
@@ -236,17 +173,102 @@ async def update_device_config(
         }
 
 
+# ============ 模式切换 API（B-06） ============
+
+@router.get("/mode", response_model=ModeResponse)
+async def get_mode(request: Request):
+    database = request.app.state.database
+    with database.session() as db:
+        from app.repositories.strategy_repository import StrategyRepository
+        repo = StrategyRepository(db)
+        config = repo.get_active_config()
+        if config is None:
+            raise HTTPException(status_code=404, detail="未找到策略配置")
+        return ModeResponse(
+            requested_mode=config.requested_mode,
+            effective_mode=config.requested_mode,
+            updated_at=config.updated_at,
+        )
+
+
+@router.put("/mode", response_model=ModeResponse)
+async def update_mode(request: Request, update_data: ModeUpdate):
+    database = request.app.state.database
+    with database.session() as db:
+        from app.repositories.strategy_repository import StrategyRepository
+        repo = StrategyRepository(db)
+        config = repo.get_active_config()
+        if config is None:
+            raise HTTPException(status_code=404, detail="未找到策略配置")
+        config.requested_mode = update_data.requested_mode
+        db.commit()
+        db.refresh(config)
+        return ModeResponse(
+            requested_mode=config.requested_mode,
+            effective_mode=config.requested_mode,
+            updated_at=config.updated_at,
+        )
+
+
+# ============ 策略运行 API（B-09） ============
+
+@router.post("/run")
+async def run_strategy(request: Request):
+    try:
+        database = request.app.state.database
+        device_read_port = getattr(request.app.state, 'device_read_port', None)
+        device_execution_port = getattr(request.app.state, 'device_execution_port', None)
+
+        runtime = StrategyRuntimeService(
+            db=database,
+            device_read_port=device_read_port,
+            device_execution_port=device_execution_port,
+        )
+
+        result = runtime.run_cycle()
+
+        if result.get("success"):
+            return {
+                "status": "success",
+                "effective_mode": result.get("effective_mode"),
+                "fallback_used": result.get("fallback_used"),
+                "decision": {
+                    "storage_power_target": result["decision"].storage_power_target,
+                    "action": result["decision"].action,
+                    "message": result["decision"].message,
+                    "source": result["decision"].source,
+                },
+                "execution": {
+                    "success": result["execution"].success,
+                    "storage_power_actual_kw": result["execution"].storage_power_actual_kw,
+                    "message": result["execution"].message,
+                },
+                "run_id": result.get("run_id"),
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "策略运行失败"))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("策略运行失败")
+        raise HTTPException(status_code=500, detail=f"策略运行失败: {str(e)}")
+
+
+@router.get("/runtime")
+async def get_runtime_status(request: Request):
+    database = request.app.state.database
+    runtime = StrategyRuntimeService(database)
+    status = runtime.get_current_status()
+    return status
 
 
 # ============ 预测数据 API（v1.3） ============
 
 @router.get("/forecast/load")
 async def get_load_forecast(request: Request):
-    """
-    获取最新的负荷预测（96 点）
-    """
+    """获取最新的负荷预测（96 点）"""
     database = request.app.state.database
-    # 从数据库获取最近一条成功运行的预测数据
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
         import json
@@ -255,7 +277,6 @@ async def get_load_forecast(request: Request):
         ).order_by(StrategyRunModel.created_at.desc()).first()
         if record and record.load_forecast_json:
             points = json.loads(record.load_forecast_json)
-            # 转换为 ForecastResult 格式
             return {
                 "model_name": "XGBoost",
                 "target": "load",
@@ -265,15 +286,13 @@ async def get_load_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 如果没有历史数据，返回模拟预测（用于演示）
+    # 模拟数据兜底
     from datetime import datetime, timedelta
-    from app.schemas.algorithm import ForecastPoint
     import math
     now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     points = []
     for i in range(96):
         dt = now + timedelta(minutes=15*i)
-        # 模拟负荷曲线：峰时高、谷时低
         hour = dt.hour
         base = 50 + 20 * math.sin((hour - 8) / 24 * 2 * math.pi)
         val = max(10, base + 5 * math.sin(i/96 * 2 * math.pi))
@@ -291,9 +310,7 @@ async def get_load_forecast(request: Request):
 
 @router.get("/forecast/pv")
 async def get_pv_forecast(request: Request):
-    """
-    获取最新的 PV 预测（96 点）
-    """
+    """获取最新的 PV 预测（96 点）"""
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
@@ -312,7 +329,7 @@ async def get_pv_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 模拟 PV 预测
+    # 模拟数据兜底
     from datetime import datetime, timedelta
     import math
     now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
