@@ -2,7 +2,7 @@
 {% block title %}策略配置 - 光储充管理系统{% endblock %}
 
 {% block content %}
-<!-- v1.3: 引入 Chart.js 用于绘制预测曲线和调度计划 -->
+<!-- Chart.js 用于绘制预测和调度曲线 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -552,6 +552,25 @@
             </div>
         </div>
 
+        <!-- ===== v1.3 新增：预测曲线展示（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>📈 次日负荷与 PV 预测</h3>
+            <div class="chart-container">
+                <div class="chart-box">
+                    <h4>负荷预测 (kW)</h4>
+                    <canvas id="loadForecastChart" height="180"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h4>PV 预测 (kW)</h4>
+                    <canvas id="pvForecastChart" height="180"></canvas>
+                </div>
+            </div>
+            <div class="forecast-toolbar">
+                <button class="btn btn-primary" onclick="fetchForecast()">🔄 刷新预测</button>
+                <span class="forecast-time" id="forecastTime">未加载</span>
+            </div>
+        </div>
+
         <!-- ===== v1.4 新增：调度计划展示（全宽） ===== -->
         <div class="config-section full-width">
             <h3>📊 储能调度计划（24小时）</h3>
@@ -695,7 +714,7 @@
         .catch(() => showToast('保存失败', 'error'));
     }
 
-    // ============ 运行策略 ============
+    // ============ 运行策略（v1.4 自动刷新预测和调度） ============
     function runStrategy() {
         const btn = event.target;
         btn.disabled = true;
@@ -703,10 +722,24 @@
         fetch('/api/strategies/run', {method: 'POST'})
         .then(res => res.json())
         .then(data => {
+            // 更新策略结果口
             document.getElementById('result-storage-target').textContent = data.storage_power_target + ' kW';
             document.getElementById('result-message').textContent = data.message;
             document.getElementById('result-last-run').textContent = new Date().toLocaleString();
+            // 更新算法和模式信息（如果有）
+            if (data.decision && data.decision.source) {
+                document.getElementById('result-algorithm').textContent = data.decision.source;
+            }
+            if (data.effective_mode) {
+                document.getElementById('result-effective-mode').textContent = data.effective_mode;
+            }
+            if (data.fallback_used !== undefined) {
+                document.getElementById('result-fallback').textContent = data.fallback_used ? '是' : '否';
+            }
             showToast('策略运行完成');
+            // v1.4: 自动刷新调度计划和预测图表
+            setTimeout(fetchSchedule, 500);
+            setTimeout(fetchForecast, 600);
         })
         .catch(() => showToast('运行失败', 'error'))
         .finally(() => {
@@ -763,6 +796,73 @@
         });
     });
 
+    // ============ v1.3 预测曲线 ============
+    let loadChart = null;
+    let pvChart = null;
+
+    async function fetchForecast() {
+        try {
+            const loadRes = await fetch('/api/strategies/forecast/load');
+            const loadData = await loadRes.json();
+            const pvRes = await fetch('/api/strategies/forecast/pv');
+            const pvData = await pvRes.json();
+
+            const labels = loadData.points.map(p => {
+                const dt = new Date(p.timestamp);
+                return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            });
+            const loadValues = loadData.points.map(p => p.value_kw);
+            const pvValues = pvData.points.map(p => p.value_kw);
+
+            updateChart('loadForecastChart', '负荷预测 (kW)', labels, loadValues, loadChart, '#4f8cf7');
+            updateChart('pvForecastChart', 'PV 预测 (kW)', labels, pvValues, pvChart, '#f59e0b');
+            document.getElementById('forecastTime').textContent = '更新于: ' + new Date().toLocaleString();
+        } catch (error) {
+            console.error('获取预测失败:', error);
+            document.getElementById('forecastTime').textContent = '加载失败';
+        }
+    }
+
+    function updateChart(canvasId, label, labels, values, chartInstance, color) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+        const newChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: values,
+                    borderColor: color,
+                    backgroundColor: color + '33',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 24, autoSkip: true } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+        if (canvasId === 'loadForecastChart') {
+            loadChart = newChart;
+        } else if (canvasId === 'pvForecastChart') {
+            pvChart = newChart;
+        }
+    }
+
     // ============ v1.4 调度计划 ============
     let schedulePowerChart = null;
     let scheduleSocChart = null;
@@ -780,9 +880,7 @@
                 const powerValues = data.schedule.map(item => item.power);
                 const socValues = data.schedule.map(item => item.soc);
 
-                // 功率图
                 updateScheduleChart('schedulePowerChart', '储能功率 (kW)', labels, powerValues, schedulePowerChart, '#10b981', '#10b98133');
-                // SOC 图
                 updateScheduleChart('scheduleSocChart', 'SOC (%)', labels, socValues, scheduleSocChart, '#6366f1', '#6366f133');
 
                 document.getElementById('scheduleTime').textContent = '更新于: ' + new Date(data.created_at).toLocaleString();
@@ -872,11 +970,11 @@
         .catch(() => {});
     }
 
-    // 页面加载完成后加载配置
+    // 页面加载完成后加载配置、预测和调度
     document.addEventListener('DOMContentLoaded', function() {
         loadDefaultConfigs();
-        // 延迟加载调度计划（确保图表容器已渲染）
-        setTimeout(fetchSchedule, 500);
+        setTimeout(fetchForecast, 300);
+        setTimeout(fetchSchedule, 600);
     });
 </script>
 {% endblock %}
