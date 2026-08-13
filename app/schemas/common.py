@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,13 +25,36 @@ class SystemState(BaseModel):
     grid: Optional[dict] = None
 
 
-class ControlDecision(BaseModel):
-    """策略层向执行层提供的统一控制决策。"""
+# ===== A-8 新增：ChargerTarget =====
+class ChargerTarget(BaseModel):
+    """充电桩控制目标（03 冻结契约）"""
+    device_code: str
+    enabled: Optional[bool] = None
+    power_limit_kw: Optional[float] = None
 
+
+# ===== A-8 修改：补充完整字段 =====
+class ControlDecision(BaseModel):
+    """策略层向执行层提供的统一控制决策（03 冻结契约）"""
     storage_power_target: float
     action: str
     message: str
     created_at: datetime
+    source: str = "fixed_rule"           # fixed_rule / milp / auto
+    mode: str = "PV_PRIORITY"
+    decision_id: Optional[str] = None
+    charger_targets: List[ChargerTarget] = []
+
+
+# ===== A-8 新增：ControlExecutionResult =====
+class ControlExecutionResult(BaseModel):
+    """执行层返回的控制执行结果（03 冻结契约）"""
+    decision_id: Optional[str] = None
+    success: bool
+    storage_power_actual_kw: float
+    charger_results: List[dict] = []
+    message: str
+    executed_at: datetime
 
 
 class StatusResponse(BaseModel):
