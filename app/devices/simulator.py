@@ -396,3 +396,30 @@ class SimulatorAdapter(DeviceAdapter):
 
             self._update_aggregate_state()
             return self._state.model_copy(deep=True)
+    def get_system_state(self):
+        """获取当前系统状态（实现 DeviceReadPort 接口）"""
+        from app.schemas import SystemState
+        from datetime import datetime
+        return SystemState(
+            timestamp=datetime.now(),
+            simulated_hour=self._simulated_hour,
+            pv_power=sum(pv.power_kw for pv in self._pv_units),
+            load_power=sum(c.power_kw for c in self._chargers),
+            storage_power=self._battery.power_kw,
+            storage_soc=self._battery.soc or 50.0,
+        )
+
+    def execute(self, decision):
+        """执行控制决策（实现 DeviceExecutionPort 接口）"""
+        from app.schemas import ControlExecutionResult
+        from datetime import datetime
+        # 调用现有的 execute_command
+        self.execute_command(decision)
+        return ControlExecutionResult(
+            decision_id=getattr(decision, 'decision_id', None),
+            success=True,
+            storage_power_actual_kw=decision.storage_power_target,
+            charger_results=[],
+            message="执行成功",
+            executed_at=datetime.now(),
+        )
