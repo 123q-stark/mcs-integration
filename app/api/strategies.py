@@ -234,3 +234,53 @@ async def update_device_config(
             "strategy_power_limit_kw": config.strategy_power_limit_kw,
             "priority": config.priority,
         }
+
+# ============ 调度计划 API（v1.4） ============
+
+@router.get("/schedule")
+async def get_schedule(request: Request):
+    """
+    获取最新的储能调度计划（96 点）
+    """
+    database = request.app.state.database
+    with database.session() as db:
+        from app.models.strategy_run import StrategyRunModel
+        import json
+        
+        record = db.query(StrategyRunModel).filter(
+            StrategyRunModel.schedule_json.isnot(None)
+        ).order_by(StrategyRunModel.created_at.desc()).first()
+        
+        if record and record.schedule_json:
+            schedule_data = json.loads(record.schedule_json)
+            return {
+                "created_at": record.created_at.isoformat(),
+                "schedule": schedule_data,
+                "source": record.source,
+                "effective_mode": record.effective_mode,
+            }
+    
+    # 模拟数据
+    from datetime import datetime, timedelta
+    import math
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    schedule = []
+    for i in range(96):
+        dt = now + timedelta(minutes=15*i)
+        hour = dt.hour
+        if 6 <= hour <= 18:
+            power = 5 * math.sin((hour - 6) / 12 * math.pi)
+        else:
+            power = -3
+        soc = 50 + 10 * math.sin(i / 96 * 2 * math.pi)
+        schedule.append({
+            "timestamp": dt.isoformat(),
+            "power": round(power, 2),
+            "soc": round(soc, 1)
+        })
+    return {
+        "created_at": datetime.now().isoformat(),
+        "schedule": schedule,
+        "source": "simulated",
+        "effective_mode": "PV_PRIORITY",
+    }
