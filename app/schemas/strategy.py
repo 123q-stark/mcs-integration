@@ -145,3 +145,19 @@ class GridStrategyConfigUpdate(BaseModel):
     max_import_power_kw: float | None = Field(None, gt=0, description="最大购电功率 (kW)")
     allow_export: bool | None = Field(None, description="是否允许向电网送电")
     max_export_power_kw: float | None = Field(None, gt=0, description="最大上网功率 (kW)")
+
+
+# ============ 模式配置 Schema（B-06） ============
+
+class ModeResponse(BaseModel):
+    """模式响应模型"""
+    requested_mode: str
+    effective_mode: str
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ModeUpdate(BaseModel):
+    """模式更新请求模型"""
+    requested_mode: str = Field(..., description="请求模式: AUTO/PV_PRIORITY/ECONOMIC_SCHEDULE/GRID_BACKUP/SAFE")
