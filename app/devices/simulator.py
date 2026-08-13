@@ -572,3 +572,54 @@ class SimulatorAdapter(DeviceAdapter):
             message="执行成功",
             executed_at=datetime.now(),
         )
+
+    def execute(self, decision):
+        """执行控制决策（实现 DeviceExecutionPort 接口）"""
+        from app.schemas import ControlExecutionResult
+        from datetime import datetime
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            logger.info(f"执行决策: target={decision.storage_power_target}, action={decision.action}")
+            # 调用现有的 execute_command 方法
+            result = self.execute_command(decision)
+            logger.info(f"执行成功: {result}")
+            return ControlExecutionResult(
+                decision_id=getattr(decision, 'decision_id', None),
+                success=True,
+                storage_power_actual_kw=decision.storage_power_target,
+                charger_results=[],
+                message="执行成功",
+                executed_at=datetime.now(),
+            )
+        except Exception as e:
+            logger.error(f"执行失败: {e}", exc_info=True)
+            return ControlExecutionResult(
+                decision_id=getattr(decision, 'decision_id', None),
+                success=False,
+                storage_power_actual_kw=0,
+                charger_results=[],
+                message=f"执行失败: {str(e)}",
+                executed_at=datetime.now(),
+            )
+
+    def get_system_state(self):
+        """获取当前系统状态（实现 DeviceReadPort 接口）"""
+        from app.schemas import SystemState
+        from datetime import datetime
+        
+        # 计算当前聚合状态
+        pv_total = sum(pv.power_kw for pv in self._pv_units)
+        load_total = sum(c.power_kw for c in self._chargers)
+        battery_power = self._battery.power_kw
+        battery_soc = self._battery.soc or 50.0
+        
+        return SystemState(
+            timestamp=datetime.now(),
+            simulated_hour=self._simulated_hour,
+            pv_power=round(pv_total, 2),
+            load_power=round(load_total, 2),
+            storage_power=round(battery_power, 2),
+            storage_soc=round(battery_soc, 2),
+        )
