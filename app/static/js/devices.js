@@ -94,7 +94,10 @@ function renderDevices(devices) {
                     <span class="label">最后更新</span>
                     <span class="value">${formatDate(device.updated_at)}</span>
                 </div>
-                <button class="status-btn" data-device-id="${device.id}">📊 查看状态</button>
+                <div style="display:flex; gap:8px; margin-top:14px;">
+                    <button class="status-btn" data-device-id="${device.id}" style="flex:1; margin:0;">📊 查看状态</button>
+                   <a href="/devices/${device.id}" class="detail-btn" style="flex:1; text-align:center; padding:10px 0; background:#4f8cf7; border-radius:8px; color:white; text-decoration:none; font-weight:600; font-size:14px; display:inline-block; border:none; cursor:pointer;">🔍 查看详情</a>
+                </div>
             </div>
         `;
     });
@@ -107,7 +110,6 @@ function renderDevices(devices) {
         });
     });
 }
-
 // ==================== API 调用 ====================
 
 async function fetchDevices() {
