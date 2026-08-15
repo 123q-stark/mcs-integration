@@ -114,7 +114,8 @@ class StrategyRuntimeService:
                     "forecast_available": load_forecast is not None and len(load_forecast.points) > 0,
                     "schedule_available": optimization is not None and optimization.success,
                     "any_device_error": False,  # 可扩展
-                    "current_price_level": self._get_current_price_level(),
+                    # ===== B-P1-05: 使用仿真时间计算电价级别 =====
+                    "current_price_level": self._get_current_price_level(state.simulated_hour),
                     "pv_power": state.pv_power,
                     "load_power": state.load_power,
                 }
@@ -235,14 +236,15 @@ class StrategyRuntimeService:
             logger.error(f"获取电价序列失败: {e}")
             return [0.5] * 96
 
-    def _get_current_price_level(self) -> str:
-        """获取当前电价级别（用于 AUTO 推荐）"""
+    # ===== B-P1-05: 使用仿真时间而非系统时间 =====
+    def _get_current_price_level(self, simulated_hour: float) -> str:
+        """根据仿真时间获取当前电价级别"""
         try:
             from app.repositories.price_repository import PriceRepository
             with self.db.session() as session:
                 repo = PriceRepository(session)
                 config = repo.get_config()
-                hour = datetime.now().hour
+                hour = int(simulated_hour) % 24
                 if 10 <= hour < 15 or 18 <= hour < 21:
                     return "peak"
                 elif 0 <= hour < 7 or 23 <= hour < 24:
