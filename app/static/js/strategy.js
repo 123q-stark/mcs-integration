@@ -5,7 +5,7 @@
 // ============ 工具函数 ============
 function showToast(message, type) {
     if (type === undefined) type = 'success';
-    const toast = document.getElementById('toast');
+    var toast = document.getElementById('toast');
     if (!toast) return;
     toast.textContent = message;
     toast.className = 'toast ' + type + ' show';
@@ -16,51 +16,24 @@ function showToast(message, type) {
 
 async function fetchJson(url, options) {
     if (options === undefined) options = {};
-    const response = await fetch(url, options);
+    var response = await fetch(url, options);
     if (!response.ok) {
         throw new Error('HTTP ' + response.status + ': ' + response.statusText);
     }
     return response.json();
 }
 
-// ============ 配置加载 ============
-async function loadDefaultConfigs() {
-    try {
-        var priceData = await fetchJson('/api/strategies/price-config');
-        document.getElementById('price-valley').value = priceData.valley_price;
-        document.getElementById('price-flat').value = priceData.flat_price;
-        document.getElementById('price-peak').value = priceData.peak_price;
-
-        var gridData = await fetchJson('/api/strategies/grid-config');
-        document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
-        document.getElementById('grid-allow-export').checked = gridData.allow_export;
-        document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
-
-        var configData = await fetchJson('/api/strategies/config');
-        document.getElementById('batt-soc-min').value = configData.soc_min;
-        document.getElementById('batt-soc-max').value = configData.soc_max;
-        document.getElementById('batt-charge-power').value = configData.charge_power_kw;
-        document.getElementById('batt-discharge-power').value = configData.discharge_power_kw;
-        document.getElementById('batt-backup-soc').value = configData.backup_soc_target || 50;
-        document.getElementById('requested-mode').value = configData.requested_mode || 'AUTO';
-        document.getElementById('effective-mode-display').textContent = configData.requested_mode || 'AUTO';
-        document.getElementById('header-mode').textContent = configData.requested_mode || 'AUTO';
-
-        await loadDeviceConfigs();
-    } catch (error) {
-        console.error('加载配置失败:', error);
-        showToast('加载配置失败', 'error');
-    }
-}
-
-// ============ 设备配置暂存 ============
+// ============ 设备配置渲染与保存 ============
 var deviceConfigChanges = {};
 
 async function loadDeviceConfigs() {
     try {
         var data = await fetchJson('/api/strategies/device-configs');
         
-        var pvConfigs = data.filter(function(c) { return c.device_code.startsWith('PV'); });
+        // 渲染 PV 表格
+        var pvConfigs = data.filter(function(c) {
+            return c.device_code.startsWith('PV');
+        });
         var pvTbody = document.getElementById('pv-config-table');
         if (pvTbody) {
             var pvHtml = '';
@@ -78,7 +51,10 @@ async function loadDeviceConfigs() {
             pvTbody.innerHTML = pvHtml;
         }
 
-        var chargerConfigs = data.filter(function(c) { return c.device_code.startsWith('CHG'); });
+        // 渲染 Charger 表格
+        var chargerConfigs = data.filter(function(c) {
+            return c.device_code.startsWith('CHG');
+        });
         var chargerTbody = document.getElementById('charger-config-table');
         if (chargerTbody) {
             var chargerHtml = '';
@@ -173,6 +149,36 @@ async function saveAllDeviceConfigs() {
     }
 }
 
+// ============ 加载所有配置 ============
+async function loadDefaultConfigs() {
+    try {
+        var priceData = await fetchJson('/api/strategies/price-config');
+        document.getElementById('price-valley').value = priceData.valley_price;
+        document.getElementById('price-flat').value = priceData.flat_price;
+        document.getElementById('price-peak').value = priceData.peak_price;
+
+        var gridData = await fetchJson('/api/strategies/grid-config');
+        document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
+        document.getElementById('grid-allow-export').checked = gridData.allow_export;
+        document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
+
+        var configData = await fetchJson('/api/strategies/config');
+        document.getElementById('batt-soc-min').value = configData.soc_min;
+        document.getElementById('batt-soc-max').value = configData.soc_max;
+        document.getElementById('batt-charge-power').value = configData.charge_power_kw;
+        document.getElementById('batt-discharge-power').value = configData.discharge_power_kw;
+        document.getElementById('batt-backup-soc').value = configData.backup_soc_target || 50;
+        document.getElementById('requested-mode').value = configData.requested_mode || 'AUTO';
+        document.getElementById('effective-mode-display').textContent = configData.requested_mode || 'AUTO';
+        document.getElementById('header-mode').textContent = configData.requested_mode || 'AUTO';
+
+        await loadDeviceConfigs();
+    } catch (error) {
+        console.error('加载配置失败:', error);
+        showToast('加载配置失败', 'error');
+    }
+}
+
 // ============ 模式保存 ============
 async function saveMode() {
     var mode = document.getElementById('requested-mode').value;
@@ -201,7 +207,7 @@ function saveBatteryConfig() {
     fetch('/api/strategies/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config_name: 'default', 'soc_min': data.soc_min, 'soc_max': data.soc_max, 'charge_power_kw': data.charge_power_kw, 'discharge_power_kw': data.discharge_power_kw, 'backup_soc_target': data.backup_soc_target })
+        body: JSON.stringify({ config_name: 'default', soc_min: data.soc_min, soc_max: data.soc_max, charge_power_kw: data.charge_power_kw, discharge_power_kw: data.discharge_power_kw, backup_soc_target: data.backup_soc_target })
     })
     .then(function() { showToast('Battery 配置已保存'); })
     .catch(function() { showToast('保存失败', 'error'); });
