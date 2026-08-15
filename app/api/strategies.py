@@ -228,16 +228,13 @@ async def run_strategy(request: Request):
         result = runtime.run_cycle()
 
         if result.get("success"):
+            # ===== B-P1-03: 统一 decision 字段，返回完整 dict =====
+            decision_dict = result["decision"].dict() if hasattr(result["decision"], 'dict') else result["decision"]
             return {
                 "status": "success",
                 "effective_mode": result.get("effective_mode"),
                 "fallback_used": result.get("fallback_used"),
-                "decision": {
-                    "storage_power_target": result["decision"].storage_power_target,
-                    "action": result["decision"].action,
-                    "message": result["decision"].message,
-                    "source": result["decision"].source,
-                },
+                "decision": decision_dict,
                 "execution": {
                     "success": result["execution"].success,
                     "storage_power_actual_kw": result["execution"].storage_power_actual_kw,
@@ -263,11 +260,14 @@ async def get_runtime_status(request: Request):
     return status
 
 
-# ============ 预测数据 API（v1.3） ============
+# ============ 预测数据 API（v1.3 + B-P1-07） ============
 
 @router.get("/forecast/load")
 async def get_load_forecast(request: Request):
-    """获取最新的负荷预测（96 点）"""
+    """
+    获取最新的负荷预测（96 点）
+    如果没有真实预测数据，返回 available: false
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
@@ -277,11 +277,11 @@ async def get_load_forecast(request: Request):
         ).order_by(StrategyRunModel.created_at.desc()).first()
         if record and record.load_forecast_json:
             points = json.loads(record.load_forecast_json)
-            # ===== B-P1-04: 统一转换为 value_kw =====
-            # 如果数据库存储的是 "value"，映射为 "value_kw"
+            # B-P1-04: 统一转换为 value_kw
             if points and "value" in points[0] and "value_kw" not in points[0]:
                 points = [{"timestamp": p["timestamp"], "value_kw": p["value"]} for p in points]
             return {
+                "available": True,
                 "model_name": "XGBoost",
                 "target": "load",
                 "created_at": record.created_at.isoformat(),
@@ -290,32 +290,21 @@ async def get_load_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 模拟数据兜底
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    points = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        base = 50 + 20 * math.sin((hour - 8) / 24 * 2 * math.pi)
-        val = max(10, base + 5 * math.sin(i/96 * 2 * math.pi))
-        # ===== B-P1-04: 统一使用 value_kw =====
-        points.append({"timestamp": dt.isoformat(), "value_kw": round(val, 2)})
+    
+    # ===== B-P1-07: 去掉 Simulated 假结果 =====
     return {
-        "model_name": "Simulated",
-        "target": "load",
-        "created_at": datetime.now().isoformat(),
-        "step_minutes": 15,
-        "points": points,
-        "mae": None,
-        "rmse": None
+        "available": False,
+        "reason": "暂无负荷预测数据，请先运行策略生成预测",
+        "points": []
     }
 
 
 @router.get("/forecast/pv")
 async def get_pv_forecast(request: Request):
-    """获取最新的 PV 预测（96 点）"""
+    """
+    获取最新的 PV 预测（96 点）
+    如果没有真实预测数据，返回 available: false
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
@@ -325,10 +314,11 @@ async def get_pv_forecast(request: Request):
         ).order_by(StrategyRunModel.created_at.desc()).first()
         if record and record.pv_forecast_json:
             points = json.loads(record.pv_forecast_json)
-            # ===== B-P1-04: 统一转换为 value_kw =====
+            # B-P1-04: 统一转换为 value_kw
             if points and "value" in points[0] and "value_kw" not in points[0]:
                 points = [{"timestamp": p["timestamp"], "value_kw": p["value"]} for p in points]
             return {
+                "available": True,
                 "model_name": "XGBoost",
                 "target": "pv",
                 "created_at": record.created_at.isoformat(),
@@ -337,29 +327,12 @@ async def get_pv_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 模拟数据兜底
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    points = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        if 6 <= hour <= 18:
-            pos = (hour - 6) / 12
-            val = 80 * math.sin(math.pi * pos)
-        else:
-            val = 0
-        # ===== B-P1-04: 统一使用 value_kw =====
-        points.append({"timestamp": dt.isoformat(), "value_kw": round(val, 2)})
+    
+    # ===== B-P1-07: 去掉 Simulated 假结果 =====
     return {
-        "model_name": "Simulated",
-        "target": "pv",
-        "created_at": datetime.now().isoformat(),
-        "step_minutes": 15,
-        "points": points,
-        "mae": None,
-        "rmse": None
+        "available": False,
+        "reason": "暂无PV预测数据，请先运行策略生成预测",
+        "points": []
     }
 
 
@@ -382,33 +355,16 @@ async def get_schedule(request: Request):
         if record and record.schedule_json:
             schedule_data = json.loads(record.schedule_json)
             return {
+                "available": True,
                 "created_at": record.created_at.isoformat(),
                 "schedule": schedule_data,
                 "source": record.source,
                 "effective_mode": record.effective_mode,
             }
     
-    # 模拟数据
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    schedule = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        if 6 <= hour <= 18:
-            power = 5 * math.sin((hour - 6) / 12 * math.pi)
-        else:
-            power = -3
-        soc = 50 + 10 * math.sin(i / 96 * 2 * math.pi)
-        schedule.append({
-            "timestamp": dt.isoformat(),
-            "power": round(power, 2),
-            "soc": round(soc, 1)
-        })
+    # ===== B-P1-07: 去掉 Simulated 假结果 =====
     return {
-        "created_at": datetime.now().isoformat(),
-        "schedule": schedule,
-        "source": "simulated",
-        "effective_mode": "PV_PRIORITY",
+        "available": False,
+        "reason": "暂无调度计划数据，请先运行策略生成调度",
+        "schedule": []
     }
