@@ -3,6 +3,7 @@
 负责设备 Simulator 的执行编排，包括：
 - 批量历史生成（A-11）
 - 执行 B 的 ControlDecision（A-8）
+- 手动控制设备（A-P1-07）
 """
 import time
 from datetime import datetime, timedelta
@@ -116,7 +117,7 @@ class DeviceRuntimeService:
                         enabled=dev.enabled,
                         status=dev.status,
                         quality=dev.quality or "good",
-                        created_at=sim_timestamp,  # A-P0-03: 显式传入仿真时间
+                        created_at=sim_timestamp,
                     )
                 )
 
@@ -243,4 +244,136 @@ class DeviceRuntimeService:
                 "success": False,
                 "storage_power_actual_kw": 0.0,
                 "message": f"执行失败: {str(e)}",
+            }
+
+    # ==================== A-P1-07: 手动控制 ====================
+
+    def manual_control(self, command) -> Dict[str, Any]:
+        """
+        手动控制设备（A-P1-07）
+        走正式 DeviceExecutionPort，执行后自动保存遥测历史
+
+        Args:
+            command: ManualDeviceControl 对象
+
+        Returns:
+            dict: {
+                "success": bool,
+                "message": str,
+                "device_code": str,
+                "power_kw": float,
+                "enabled": bool,
+                "status": str
+            }
+        """
+        try:
+            device_code = command.device_code
+            cmd = command.command
+
+            # 1. 查找目标充电桩
+            target_charger = None
+            for charger in self.simulator.get_chargers():
+                if charger.device_code == device_code:
+                    target_charger = charger
+                    break
+
+            if target_charger is None:
+                return {
+                    "success": False,
+                    "message": f"设备 {device_code} 未找到或不是充电桩",
+                    "device_code": device_code,
+                    "power_kw": 0.0,
+                    "enabled": False,
+                    "status": "not_found",
+                }
+
+            # 2. 构造 charger_targets
+            if cmd == "start":
+                enabled = True
+                power_limit = None
+                status_msg = f"充电桩 {device_code} 已启动"
+            elif cmd == "stop":
+                enabled = False
+                power_limit = None
+                status_msg = f"充电桩 {device_code} 已停止"
+            elif cmd == "set_power":
+                enabled = True
+                power_limit = command.target_power_kw
+                if power_limit is None or power_limit <= 0:
+                    return {
+                        "success": False,
+                        "message": "set_power 需要有效的 target_power_kw",
+                        "device_code": device_code,
+                        "power_kw": 0.0,
+                        "enabled": False,
+                        "status": "invalid_power",
+                    }
+                status_msg = f"充电桩 {device_code} 功率上限设置为 {power_limit}kW"
+            else:
+                return {
+                    "success": False,
+                    "message": f"不支持的命令: {cmd}",
+                    "device_code": device_code,
+                    "power_kw": 0.0,
+                    "enabled": False,
+                    "status": "unknown_command",
+                }
+
+            # 3. 执行控制
+            charger_mods = [{
+                "device_code": device_code,
+                "enabled": enabled,
+                "power_limit_kw": power_limit,
+            }]
+            self.simulator.step_with_control(
+                storage_power_target=0.0,
+                charger_targets=charger_mods,
+            )
+
+            # 4. 保存遥测历史
+            devices = self.simulator.get_all_devices_state()
+            records = []
+            for dev in devices:
+                records.append(
+                    DeviceTelemetry(
+                        device_code=dev.device_code,
+                        device_type=dev.device_type,
+                        power_kw=dev.power_kw,
+                        voltage_v=dev.voltage_v,
+                        current_a=dev.current_a,
+                        temperature_c=dev.temperature_c,
+                        energy_kwh=dev.energy_kwh,
+                        soc=dev.soc,
+                        soh=dev.soh,
+                        enabled=dev.enabled,
+                        status=dev.status,
+                        quality=dev.quality or "good",
+                    )
+                )
+            self.telemetry_repo.add_many(records)
+            self.telemetry_repo.db.commit()
+            # 5. 返回结果
+            after_charger = None
+            for charger in self.simulator.get_chargers():
+                if charger.device_code == device_code:
+                    after_charger = charger
+                    break
+
+            return {
+                "success": True,
+                "message": status_msg,
+                "device_code": device_code,
+                "power_kw": after_charger.power_kw if after_charger else 0.0,
+                "enabled": after_charger.enabled if after_charger else False,
+                "status": after_charger.status if after_charger else "unknown",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"控制失败: {str(e)}",
+                "device_code": command.device_code if hasattr(command, 'device_code') else "",
+                "power_kw": 0.0,
+                "enabled": False,
+                "status": "error",
             }

@@ -79,6 +79,7 @@ def get_device_status(
             detail="系统尚未初始化，请稍后重试。",
         )
 
+
 # ==================== A-06: 设备历史数据接口（使用 DeviceTelemetry） ====================
 from app.models.device_telemetry import DeviceTelemetry
 from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
@@ -161,7 +162,7 @@ def get_system_state(
         )
 
 
-# ==================== A-07: 充电桩手动控制接口 ====================
+# ==================== A-07: 充电桩手动控制接口（A-P1-07 修改） ====================
 from pydantic import BaseModel
 from typing import Literal
 
@@ -179,7 +180,7 @@ def control_device(
     db: Session = Depends(get_db),
 ):
     """
-    控制设备（目前仅支持充电桩 start/stop）
+    控制设备（A-P1-07: 走正式 DeviceExecutionPort）
     - **device_id**: 设备 ID
     - **command**: start / stop
     """
@@ -202,59 +203,62 @@ def control_device(
             detail=f"设备 {device.device_code} 不是充电桩，无法控制",
         )
 
-    # 2. 获取 Simulator 实例
-    ems_service = request.app.state.service
-    if ems_service is None:
-        print("[API] ❌ ems_service is None")
+    # 2. 获取 DeviceExecutionPort（A-P1-07: 使用正式 Port）
+    execution_port = request.app.state.device_execution_port
+    if execution_port is None:
+        print("[API] ❌ device_execution_port is None")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="EMS 服务尚未初始化",
+            detail="执行端口尚未初始化",
         )
 
-    simulator = ems_service.device
-    if simulator is None:
-        print("[API] ❌ simulator is None")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="模拟器尚未初始化",
-        )
+    # 3. 构造 ManualDeviceControl
+    from app.schemas.common import ManualDeviceControl
+    manual_cmd = ManualDeviceControl(
+        device_code=device.device_code,
+        command=control_req.command,
+        target_power_kw=None,
+    )
 
-    print(f"[API] 获取到 Simulator: {id(simulator)}")
+    # 4. 通过正式 Port 执行
+    try:
+        result = execution_port.manual_control(manual_cmd)
+    except AttributeError:
+        # 如果 manual_control 方法不存在，降级到原有逻辑
+        print("[API] ⚠️ manual_control 方法不存在，使用降级逻辑")
+        ems_service = request.app.state.service
+        simulator = ems_service.device
+        if control_req.command == "start":
+            success = simulator.set_charger_enabled(device.device_code, True)
+            message = f"充电桩 {device.device_code} 已启用（降级）"
+        else:
+            success = simulator.set_charger_enabled(device.device_code, False)
+            message = f"充电桩 {device.device_code} 已停用（降级）"
+        return {
+            "success": success,
+            "message": message,
+            "device_code": device.device_code,
+            "command": control_req.command,
+            "mode": "fallback",
+        }
 
-    # 3. 执行控制命令
-    if control_req.command == "start":
-        print(f"[API] 准备启动充电桩: {device.device_code}")
-        success = simulator.set_charger_enabled(device.device_code, True)
-        message = f"充电桩 {device.device_code} 已启用"
-    elif control_req.command == "stop":
-        print(f"[API] 准备停止充电桩: {device.device_code}")
-        success = simulator.set_charger_enabled(device.device_code, False)
-        message = f"充电桩 {device.device_code} 已停用"
+    # 5. 返回结果
+    if result.get("success", False):
+        return {
+            "success": True,
+            "message": result.get("message", ""),
+            "device_code": device.device_code,
+            "command": control_req.command,
+            "power_kw": result.get("power_kw", 0.0),
+            "enabled": result.get("enabled", False),
+            "status": result.get("status", "unknown"),
+            "mode": "port",
+        }
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的命令: {control_req.command}",
-        )
-
-    print(f"[API] set_charger_enabled 返回: {success}")
-    if not success:
-        raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"控制充电桩 {device.device_code} 失败",
+            detail=result.get("message", "控制失败"),
         )
-
-    # 重新获取最新状态（验证是否已更改）
-    updated_chargers = simulator.get_chargers()
-    for c in updated_chargers:
-        if c.device_code == device.device_code:
-            print(f"[API] 更新后状态: {c.device_code} -> enabled={c.enabled}, power={c.power_kw}")
-
-    return {
-        "success": True,
-        "message": message,
-        "device_code": device.device_code,
-        "command": control_req.command,
-    }
 
 
 # ==================== A-11: 快速历史生成 ====================
