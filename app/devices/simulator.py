@@ -157,6 +157,8 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.status = "disabled"
                 charger.current_a = 0.0
                 charger.connected = False
+                charger.is_online = False  # A-P1-06: 停止时离线
+                charger.quality = "disabled"  # A-P1-06: 质量标记为禁用
                 charger.timestamp = self._timestamp
                 continue
 
@@ -177,12 +179,12 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.current_a = round(charger.power_kw / charger.voltage_v * 1000, 2)
 
             # A-P1-01: 累加累计用电量
-            # E_{k+1} = E_k + |P_k| * Δt
             energy_delta = abs(charger.power_kw) * self._simulation_step_hours
             charger.energy_kwh = round((charger.energy_kwh or 0.0) + energy_delta, 2)
 
             charger.timestamp = self._timestamp
-            charger.is_online = True
+            charger.is_online = True  # 运行时在线
+            charger.quality = "good"  # A-P1-06: 运行时质量良好
 
     def _update_battery(self, power_kw: float) -> None:
         """更新 Battery 状态"""
