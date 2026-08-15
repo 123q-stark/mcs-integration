@@ -2,9 +2,10 @@
 设备运行时服务
 负责设备 Simulator 的执行编排，包括：
 - 批量历史生成（A-11）
-- 执行 B 的 ControlDecision（A-8，后续实现）
+- 执行 B 的 ControlDecision（A-8）
 """
 import time
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from app.devices.simulator import SimulatorAdapter
@@ -54,11 +55,13 @@ class DeviceRuntimeService:
         # 1. 重置 Simulator（固定种子）
         self.simulator.reset(seed=seed)
 
+        # A-P0-03: 固定仿真起始时间（与 Simulator 的 simulated_hour=6.0 对齐）
+        sim_time = datetime(2026, 1, 1, 6, 0, 0)
+
         # 2. 清空现有遥测历史（避免重复）
         self.telemetry_repo.clear_runtime_history()
 
         total_steps = days * 96
-        records_per_step = 12  # 12 个逻辑设备
         all_records: List[DeviceTelemetry] = []
 
         print(f"[DeviceRuntimeService] 开始生成 {days} 天历史数据（共 {total_steps} 个时刻）...")
@@ -90,10 +93,14 @@ class DeviceRuntimeService:
             # 推进一步（应用控制）
             self.simulator.step_with_control(storage_power_target=target)
 
+            # A-P0-03: 使用手动维护的仿真时间戳
+            sim_timestamp = sim_time
+            sim_time += timedelta(minutes=15)
+
             # 获取当前所有设备状态
             devices = self.simulator.get_all_devices_state()
 
-            # 收集遥测记录
+            # 收集遥测记录（显式传入 created_at）
             for dev in devices:
                 all_records.append(
                     DeviceTelemetry(
@@ -109,6 +116,7 @@ class DeviceRuntimeService:
                         enabled=dev.enabled,
                         status=dev.status,
                         quality=dev.quality or "good",
+                        created_at=sim_timestamp,  # A-P0-03: 显式传入仿真时间
                     )
                 )
 
@@ -135,6 +143,7 @@ class DeviceRuntimeService:
             "total_records": len(all_records),
             "message": message,
         }
+
     # ==================== A-P0-01: 正式只读接口 ====================
 
     def get_system_state(self):
@@ -153,6 +162,7 @@ class DeviceRuntimeService:
             if dev.device_code == device_code:
                 return dev
         return None
+
     # ==================== A-08: 执行 ControlDecision ====================
 
     def execute(self, decision) -> Dict[str, Any]:

@@ -317,7 +317,10 @@ class SimulatorAdapter(DeviceAdapter):
             # Grid
             result.append(self._grid.model_copy(deep=True))
             return result
-
+    def get_current_timestamp(self) -> datetime:
+        """获取当前仿真时间戳（A-P0-03）"""
+        with self._lock:
+            return self._timestamp
     def step_with_control(
         self,
         storage_power_target: float = 0.0,

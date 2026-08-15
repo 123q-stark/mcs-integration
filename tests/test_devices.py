@@ -601,3 +601,46 @@ def test_get_state_without_advance_does_not_change_time():
     for _ in range(50):
         state = sim.get_state_without_advance()
         assert state.simulated_hour == t0
+# ==================== A-P0-03: 历史时间戳测试 ====================
+
+def test_generate_history_has_15min_timeline():
+    """A-P0-03: 验证生成的历史数据是15min连续时间序列"""
+    from app.devices.simulator import SimulatorAdapter
+    from app.services.device_runtime_service import DeviceRuntimeService
+    from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
+    import tempfile
+    import os
+    from datetime import timedelta
+
+    # 创建临时数据库
+    fd, path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)
+    db_url = f"sqlite:///{path}"
+
+    from app.database import Database, Base
+    db = Database(db_url)
+    Base.metadata.create_all(bind=db.engine)
+
+    simulator = SimulatorAdapter()
+    simulator.reset(seed=2026)
+
+    with db.session() as session:
+        telemetry_repo = DeviceTelemetryRepository(session)
+        service = DeviceRuntimeService(simulator, telemetry_repo)
+
+        service.generate_history(days=1, seed=2026)
+
+        records = telemetry_repo.get_history("PV001", limit=100)
+
+        assert len(records) == 96, f"PV001 应有 96 条记录，实际 {len(records)}"
+
+        for i in range(len(records) - 1):
+            diff = records[i + 1].created_at - records[i].created_at
+            assert diff == timedelta(minutes=15), f"第 {i} 条到第 {i+1} 条时间差为 {diff}，应为 15 分钟"
+
+        total_span = records[-1].created_at - records[0].created_at
+        expected_span = timedelta(minutes=95 * 15)
+        assert total_span == expected_span, f"总跨度为 {total_span}，应为 {expected_span}"
+
+    db.engine.dispose()
+    os.unlink(path)
