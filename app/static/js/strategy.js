@@ -3,41 +3,40 @@
 // ============================================================
 
 // ============ 工具函数 ============
-function showToast(message, type = 'success') {
+function showToast(message, type) {
+    if (type === undefined) type = 'success';
     const toast = document.getElementById('toast');
     if (!toast) return;
     toast.textContent = message;
     toast.className = 'toast ' + type + ' show';
-    setTimeout(() => {
+    setTimeout(function() {
         toast.classList.remove('show');
     }, 3000);
 }
 
-async function fetchJson(url, options = {}) {
+async function fetchJson(url, options) {
+    if (options === undefined) options = {};
     const response = await fetch(url, options);
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error('HTTP ' + response.status + ': ' + response.statusText);
     }
     return response.json();
 }
 
-// ============ 设备配置暂存 ============
-const deviceConfigChanges = {};
-
-// ============ 加载所有配置 ============
+// ============ 配置加载 ============
 async function loadDefaultConfigs() {
     try {
-        const priceData = await fetchJson('/api/strategies/price-config');
+        var priceData = await fetchJson('/api/strategies/price-config');
         document.getElementById('price-valley').value = priceData.valley_price;
         document.getElementById('price-flat').value = priceData.flat_price;
         document.getElementById('price-peak').value = priceData.peak_price;
 
-        const gridData = await fetchJson('/api/strategies/grid-config');
+        var gridData = await fetchJson('/api/strategies/grid-config');
         document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
         document.getElementById('grid-allow-export').checked = gridData.allow_export;
         document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
 
-        const configData = await fetchJson('/api/strategies/config');
+        var configData = await fetchJson('/api/strategies/config');
         document.getElementById('batt-soc-min').value = configData.soc_min;
         document.getElementById('batt-soc-max').value = configData.soc_max;
         document.getElementById('batt-charge-power').value = configData.charge_power_kw;
@@ -54,44 +53,50 @@ async function loadDefaultConfigs() {
     }
 }
 
-// ============ 加载设备配置（动态渲染表格） ============
+// ============ 设备配置暂存 ============
+var deviceConfigChanges = {};
+
 async function loadDeviceConfigs() {
     try {
-        const data = await fetchJson('/api/strategies/device-configs');
+        var data = await fetchJson('/api/strategies/device-configs');
         
-        const pvConfigs = data.filter(c => c.device_code.startsWith('PV'));
-        const pvTbody = document.getElementById('pv-config-table');
+        var pvConfigs = data.filter(function(c) { return c.device_code.startsWith('PV'); });
+        var pvTbody = document.getElementById('pv-config-table');
         if (pvTbody) {
-            pvTbody.innerHTML = pvConfigs.map(c => `
-                <tr>
-                    <td><strong>${c.device_code}</strong></td>
-                    <td><input type="checkbox" ${c.participate_in_strategy ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'participate_in_strategy', this.checked)"></td>
-                    <td><input type="checkbox" ${c.allow_strategy_control ? 'checked' : ''} disabled></td>
-                    <td><input type="number" value="${c.priority}" min="1" max="5" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'priority', parseInt(this.value))"></td>
-                    <td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig('${c.device_code}')">💾 保存</button></td>
-                </tr>
-            `).join('');
+            var pvHtml = '';
+            for (var i = 0; i < pvConfigs.length; i++) {
+                var c = pvConfigs[i];
+                var checked = c.participate_in_strategy ? 'checked' : '';
+                pvHtml += '<tr>';
+                pvHtml += '<td><strong>' + c.device_code + '</strong></td>';
+                pvHtml += '<td><input type="checkbox" ' + checked + ' onchange="updateDeviceConfig(\'' + c.device_code + '\', \'participate_in_strategy\', this.checked)"></td>';
+                pvHtml += '<td><input type="checkbox" ' + (c.allow_strategy_control ? 'checked' : '') + ' disabled></td>';
+                pvHtml += '<td><input type="number" value="' + c.priority + '" min="1" max="5" onchange="updateDeviceConfig(\'' + c.device_code + '\', \'priority\', parseInt(this.value))"></td>';
+                pvHtml += '<td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig(\'' + c.device_code + '\')">💾 保存</button></td>';
+                pvHtml += '</tr>';
+            }
+            pvTbody.innerHTML = pvHtml;
         }
 
-        const chargerConfigs = data.filter(c => c.device_code.startsWith('CHG'));
-        const chargerTbody = document.getElementById('charger-config-table');
+        var chargerConfigs = data.filter(function(c) { return c.device_code.startsWith('CHG'); });
+        var chargerTbody = document.getElementById('charger-config-table');
         if (chargerTbody) {
-            chargerTbody.innerHTML = chargerConfigs.map(c => `
-                <tr>
-                    <td><strong>${c.device_code}</strong></td>
-                    <td><input type="checkbox" ${c.participate_in_strategy ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'participate_in_strategy', this.checked)"></td>
-                    <td><input type="checkbox" ${c.allow_strategy_control ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'allow_strategy_control', this.checked)"></td>
-                    <td><input type="number" value="${c.strategy_power_limit_kw || 50}" min="0" max="200" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'strategy_power_limit_kw', parseFloat(this.value))"></td>
-                    <td><input type="number" value="${c.priority}" min="1" max="5" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'priority', parseInt(this.value))"></td>
-                    <td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig('${c.device_code}')">💾 保存</button></td>
-                </tr>
-            `).join('');
+            var chargerHtml = '';
+            for (var j = 0; j < chargerConfigs.length; j++) {
+                var c2 = chargerConfigs[j];
+                var checked1 = c2.participate_in_strategy ? 'checked' : '';
+                var checked2 = c2.allow_strategy_control ? 'checked' : '';
+                var limitVal = c2.strategy_power_limit_kw || 50;
+                chargerHtml += '<tr>';
+                chargerHtml += '<td><strong>' + c2.device_code + '</strong></td>';
+                chargerHtml += '<td><input type="checkbox" ' + checked1 + ' onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'participate_in_strategy\', this.checked)"></td>';
+                chargerHtml += '<td><input type="checkbox" ' + checked2 + ' onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'allow_strategy_control\', this.checked)"></td>';
+                chargerHtml += '<td><input type="number" value="' + limitVal + '" min="0" max="200" onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'strategy_power_limit_kw\', parseFloat(this.value))"></td>';
+                chargerHtml += '<td><input type="number" value="' + c2.priority + '" min="1" max="5" onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'priority\', parseInt(this.value))"></td>';
+                chargerHtml += '<td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig(\'' + c2.device_code + '\')">💾 保存</button></td>';
+                chargerHtml += '</tr>';
+            }
+            chargerTbody.innerHTML = chargerHtml;
         }
     } catch (error) {
         console.error('加载设备配置失败:', error);
@@ -107,51 +112,58 @@ function updateDeviceConfig(deviceCode, field, value) {
 }
 
 async function saveDeviceConfig(deviceCode) {
-    const changes = deviceConfigChanges[deviceCode] || {};
-    if (Object.keys(changes).length === 0) {
+    var changes = deviceConfigChanges[deviceCode] || {};
+    var keys = Object.keys(changes);
+    if (keys.length === 0) {
         showToast('没有需要保存的修改', 'warning');
         return;
     }
     
-    const btn = event?.target;
-    if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+    var btn = event ? event.target : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+    }
     
     try {
-        await fetchJson(`/api/strategies/device-configs/${deviceCode}`, {
+        await fetchJson('/api/strategies/device-configs/' + deviceCode, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(changes)
         });
-        
         delete deviceConfigChanges[deviceCode];
-        showToast(`${deviceCode} 配置已保存`);
+        showToast(deviceCode + ' 配置已保存');
         await loadDeviceConfigs();
     } catch (error) {
         console.error('保存失败:', error);
         showToast('保存失败: ' + error.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '💾 保存';
+        }
     }
 }
 
 async function saveAllDeviceConfigs() {
-    const allChanges = Object.keys(deviceConfigChanges);
+    var allChanges = Object.keys(deviceConfigChanges);
     if (allChanges.length === 0) {
         showToast('没有需要保存的修改', 'warning');
         return;
     }
     
     try {
-        for (const deviceCode of allChanges) {
-            const changes = deviceConfigChanges[deviceCode];
-            await fetchJson(`/api/strategies/device-configs/${deviceCode}`, {
+        for (var i = 0; i < allChanges.length; i++) {
+            var deviceCode = allChanges[i];
+            var changes = deviceConfigChanges[deviceCode];
+            await fetchJson('/api/strategies/device-configs/' + deviceCode, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(changes)
             });
         }
-        for (const key of allChanges) {
-            delete deviceConfigChanges[key];
+        for (var j = 0; j < allChanges.length; j++) {
+            delete deviceConfigChanges[allChanges[j]];
         }
         showToast('所有配置已保存');
         await loadDeviceConfigs();
@@ -163,9 +175,9 @@ async function saveAllDeviceConfigs() {
 
 // ============ 模式保存 ============
 async function saveMode() {
-    const mode = document.getElementById('requested-mode').value;
+    var mode = document.getElementById('requested-mode').value;
     try {
-        const data = await fetchJson('/api/strategies/mode', {
+        var data = await fetchJson('/api/strategies/mode', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requested_mode: mode })
@@ -179,7 +191,7 @@ async function saveMode() {
 }
 
 function saveBatteryConfig() {
-    const data = {
+    var data = {
         soc_min: parseFloat(document.getElementById('batt-soc-min').value),
         soc_max: parseFloat(document.getElementById('batt-soc-max').value),
         charge_power_kw: parseFloat(document.getElementById('batt-charge-power').value),
@@ -189,14 +201,14 @@ function saveBatteryConfig() {
     fetch('/api/strategies/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config_name: 'default', ...data })
+        body: JSON.stringify({ config_name: 'default', 'soc_min': data.soc_min, 'soc_max': data.soc_max, 'charge_power_kw': data.charge_power_kw, 'discharge_power_kw': data.discharge_power_kw, 'backup_soc_target': data.backup_soc_target })
     })
-    .then(() => showToast('Battery 配置已保存'))
-    .catch(() => showToast('保存失败', 'error'));
+    .then(function() { showToast('Battery 配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
 function saveGridConfig() {
-    const data = {
+    var data = {
         max_import_power_kw: parseFloat(document.getElementById('grid-max-import').value),
         allow_export: document.getElementById('grid-allow-export').checked,
         max_export_power_kw: parseFloat(document.getElementById('grid-max-export').value)
@@ -206,12 +218,12 @@ function saveGridConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(() => showToast('Grid 配置已保存'))
-    .catch(() => showToast('保存失败', 'error'));
+    .then(function() { showToast('Grid 配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
 function savePriceConfig() {
-    const data = {
+    var data = {
         valley_price: parseFloat(document.getElementById('price-valley').value),
         flat_price: parseFloat(document.getElementById('price-flat').value),
         peak_price: parseFloat(document.getElementById('price-peak').value)
@@ -221,20 +233,23 @@ function savePriceConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(() => showToast('电价配置已保存'))
-    .catch(() => showToast('保存失败', 'error'));
+    .then(function() { showToast('电价配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
+// ============ 策略运行 ============
 async function runStrategy() {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = '运行中...';
+    var btn = event ? event.target : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '运行中...';
+    }
     try {
-        const data = await fetchJson('/api/strategies/run', { method: 'POST' });
-        document.getElementById('result-storage-target').textContent = (data.decision?.storage_power_target || 0) + ' kW';
-        document.getElementById('result-message').textContent = data.decision?.message || data.message || '无消息';
+        var data = await fetchJson('/api/strategies/run', { method: 'POST' });
+        document.getElementById('result-storage-target').textContent = (data.decision ? data.decision.storage_power_target : 0) + ' kW';
+        document.getElementById('result-message').textContent = (data.decision ? data.decision.message : data.message) || '无消息';
         document.getElementById('result-last-run').textContent = new Date().toLocaleString();
-        if (data.decision?.source) {
+        if (data.decision && data.decision.source) {
             document.getElementById('result-algorithm').textContent = data.decision.source;
         }
         if (data.effective_mode) {
@@ -254,14 +269,16 @@ async function runStrategy() {
         document.getElementById('header-status-text').textContent = '运行失败';
         document.getElementById('header-status-dot').className = 'stat-dot offline';
     } finally {
-        btn.disabled = false;
-        btn.textContent = '▶️ 运行一次策略';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '▶️ 运行一次策略';
+        }
     }
 }
 
 async function refreshResult() {
     try {
-        const data = await fetchJson('/api/strategies/runtime');
+        var data = await fetchJson('/api/strategies/runtime');
         document.getElementById('result-algorithm').textContent = data.source || 'FixedRule';
         document.getElementById('result-requested-mode').textContent = data.requested_mode || 'AUTO';
         document.getElementById('result-effective-mode').textContent = data.effective_mode || 'AUTO';
@@ -280,48 +297,20 @@ async function refreshResult() {
     }
 }
 
-document.getElementById('preview-form')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const data = {
-        pv_power: parseFloat(document.getElementById('pv-power').value),
-        load_power: parseFloat(document.getElementById('load-power').value),
-        storage_power: parseFloat(document.getElementById('storage-power').value),
-        storage_soc: parseFloat(document.getElementById('storage-soc').value)
-    };
-    fetch('/api/strategies/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(res => res.json())
-    .then(result => {
-        const actionEl = document.getElementById('preview-action');
-        actionEl.textContent = result.action;
-        actionEl.className = 'action-tag ' + result.action;
-        document.getElementById('preview-power').textContent = result.storage_power_target;
-        document.getElementById('preview-message').textContent = result.message;
-        document.getElementById('preview-time').textContent = new Date(result.created_at).toLocaleString();
-        document.getElementById('preview-result').style.display = 'block';
-    })
-    .catch(() => {
-        document.getElementById('preview-result').style.display = 'block';
-        document.getElementById('preview-message').textContent = '预览失败，请检查输入';
-    });
-});
-
-let loadChart = null;
-let pvChart = null;
+// ============ 预测曲线 ============
+var loadChart = null;
+var pvChart = null;
 
 async function fetchForecast() {
     try {
-        const loadData = await fetchJson('/api/strategies/forecast/load');
-        const pvData = await fetchJson('/api/strategies/forecast/pv');
-        const labels = loadData.points.map(p => {
-            const dt = new Date(p.timestamp);
+        var loadData = await fetchJson('/api/strategies/forecast/load');
+        var pvData = await fetchJson('/api/strategies/forecast/pv');
+        var labels = loadData.points.map(function(p) {
+            var dt = new Date(p.timestamp);
             return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
         });
-        const loadValues = loadData.points.map(p => p.value_kw);
-        const pvValues = pvData.points.map(p => p.value_kw);
+        var loadValues = loadData.points.map(function(p) { return p.value_kw; });
+        var pvValues = pvData.points.map(function(p) { return p.value_kw; });
         updateChart('loadForecastChart', '负荷预测 (kW)', labels, loadValues, loadChart, '#4f8cf7');
         updateChart('pvForecastChart', 'PV 预测 (kW)', labels, pvValues, pvChart, '#f59e0b');
         document.getElementById('forecastTime').textContent = '更新于: ' + new Date().toLocaleString();
@@ -332,11 +321,13 @@ async function fetchForecast() {
 }
 
 function updateChart(canvasId, label, labels, values, chartInstance, color) {
-    const canvas = document.getElementById(canvasId);
+    var canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-    const newChart = new Chart(ctx, {
+    var ctx = canvas.getContext('2d');
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    var newChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -360,23 +351,26 @@ function updateChart(canvasId, label, labels, values, chartInstance, color) {
             }
         }
     });
-    if (canvasId === 'loadForecastChart') loadChart = newChart;
-    else if (canvasId === 'pvForecastChart') pvChart = newChart;
+    if (canvasId === 'loadForecastChart') {
+        loadChart = newChart;
+    } else if (canvasId === 'pvForecastChart') {
+        pvChart = newChart;
+    }
 }
 
-let schedulePowerChart = null;
-let scheduleSocChart = null;
+var schedulePowerChart = null;
+var scheduleSocChart = null;
 
 async function fetchSchedule() {
     try {
-        const data = await fetchJson('/api/strategies/schedule');
+        var data = await fetchJson('/api/strategies/schedule');
         if (data.schedule && data.schedule.length > 0) {
-            const labels = data.schedule.map(item => {
-                const dt = new Date(item.timestamp);
+            var labels = data.schedule.map(function(item) {
+                var dt = new Date(item.timestamp);
                 return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             });
-            const powerValues = data.schedule.map(item => item.power);
-            const socValues = data.schedule.map(item => item.soc);
+            var powerValues = data.schedule.map(function(item) { return item.power; });
+            var socValues = data.schedule.map(function(item) { return item.soc; });
             updateScheduleChart('schedulePowerChart', '储能功率 (kW)', labels, powerValues, schedulePowerChart, '#10b981', '#10b98133');
             updateScheduleChart('scheduleSocChart', 'SOC (%)', labels, socValues, scheduleSocChart, '#6366f1', '#6366f133');
             document.getElementById('scheduleTime').textContent = '更新于: ' + new Date(data.created_at).toLocaleString();
@@ -390,11 +384,13 @@ async function fetchSchedule() {
 }
 
 function updateScheduleChart(canvasId, label, labels, values, chartInstance, color, fillColor) {
-    const canvas = document.getElementById(canvasId);
+    var canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-    const newChart = new Chart(ctx, {
+    var ctx = canvas.getContext('2d');
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    var newChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -418,12 +414,59 @@ function updateScheduleChart(canvasId, label, labels, values, chartInstance, col
             }
         }
     });
-    if (canvasId === 'schedulePowerChart') schedulePowerChart = newChart;
-    else if (canvasId === 'scheduleSocChart') scheduleSocChart = newChart;
+    if (canvasId === 'schedulePowerChart') {
+        schedulePowerChart = newChart;
+    } else if (canvasId === 'scheduleSocChart') {
+        scheduleSocChart = newChart;
+    }
 }
 
+// ============ 预览决策 ============
+function getPreviewData() {
+    return {
+        pv_power: parseFloat(document.getElementById('pv-power').value),
+        load_power: parseFloat(document.getElementById('load-power').value),
+        storage_power: parseFloat(document.getElementById('storage-power').value),
+        storage_soc: parseFloat(document.getElementById('storage-soc').value)
+    };
+}
+
+function displayPreviewResult(result) {
+    var actionEl = document.getElementById('preview-action');
+    actionEl.textContent = result.action;
+    actionEl.className = 'action-tag ' + result.action;
+    document.getElementById('preview-power').textContent = result.storage_power_target;
+    document.getElementById('preview-message').textContent = result.message;
+    document.getElementById('preview-time').textContent = new Date(result.created_at).toLocaleString();
+    document.getElementById('preview-result').style.display = 'block';
+}
+
+async function previewDecision() {
+    try {
+        var data = getPreviewData();
+        var result = await fetchJson('/api/strategies/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        displayPreviewResult(result);
+    } catch (error) {
+        document.getElementById('preview-result').style.display = 'block';
+        document.getElementById('preview-message').textContent = '预览失败，请检查输入';
+    }
+}
+
+// ============ 页面初始化 ============
 document.addEventListener('DOMContentLoaded', function() {
     loadDefaultConfigs();
     setTimeout(fetchForecast, 300);
     setTimeout(fetchSchedule, 600);
+
+    var form = document.getElementById('preview-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            previewDecision();
+        });
+    }
 });
