@@ -236,104 +236,11 @@ class SimulatorAdapter(DeviceAdapter):
         self._update_grid()
         self._update_aggregate_state()
 
-    # ==================== A-04: 保存设备遥测（完整字段） ====================
-    def _save_device_history(self) -> None:
-        """
-        保存所有设备的历史记录到 device_telemetry 表（完整字段）
-        修改于 A-11：补充 voltage_v、current_a、temperature_c、energy_kwh、status、enabled 等字段
-        """
-        try:
-            from app.database import Database
-            from app.config import Settings
-            from app.models import Device, DeviceTelemetry
-
-            settings = Settings.from_env()
-            db = Database(settings.database_url)
-
-            with db.session() as session:
-                devices = session.query(Device).all()
-                if not devices:
-                    return
-
-                records = []
-                for device in devices:
-                    # 根据设备类型从当前状态提取数据
-                    if device.device_type == "pv":
-                        unit = next((u for u in self._pv_units if u.device_code == device.device_code), None)
-                        if not unit:
-                            continue
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=unit.power_kw,
-                            voltage_v=unit.voltage_v,
-                            current_a=unit.current_a,
-                            temperature_c=unit.temperature_c,
-                            energy_kwh=unit.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=None,
-                            status=None,
-                            quality=unit.quality or "good",
-                        ))
-                    elif device.device_type == "charger":
-                        unit = next((c for c in self._chargers if c.device_code == device.device_code), None)
-                        if not unit:
-                            continue
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=unit.power_kw,
-                            voltage_v=unit.voltage_v,
-                            current_a=unit.current_a,
-                            temperature_c=None,
-                            energy_kwh=unit.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=unit.enabled,
-                            status=unit.status,
-                            quality=unit.quality or "good",
-                        ))
-                    elif device.device_type in ("storage", "battery"):
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=self._battery.power_kw,
-                            voltage_v=self._battery.voltage_v,
-                            current_a=self._battery.current_a,
-                            temperature_c=self._battery.temperature_c,
-                            energy_kwh=self._battery.energy_kwh,
-                            soc=self._battery.soc,
-                            soh=self._battery.soh,
-                            enabled=None,
-                            status=None,
-                            quality=self._battery.quality or "good",
-                        ))
-                    elif device.device_type == "grid":
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=self._grid.power_kw,
-                            voltage_v=self._grid.voltage_v,
-                            current_a=self._grid.current_a,
-                            temperature_c=None,
-                            energy_kwh=self._grid.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=None,
-                            status=None,
-                            quality=self._grid.quality or "good",
-                        ))
-
-                if records:
-                    session.add_all(records)
-                    session.commit()
-                    print(f"[Simulator] ✅ 已保存 {len(records)} 条遥测记录")
-        except Exception as e:
-            print(f"[Simulator] ❌ 保存设备历史失败: {e}")
-
-    # ==================== A-11: 新增方法 ====================
-
+    # ==================== A-P0-02: 历史保存已迁移至 DeviceRuntimeService ====================
+    # _save_device_history() 已删除。
+    # 历史保存职责已统一由 DeviceRuntimeService 承担：
+    # - generate_history() 使用 telemetry_repo.add_many()
+    # - execute() 使用 telemetry_repo.add_many()
     def reset(self, seed: Optional[int] = None) -> SystemState:
         """
         重置模拟器到初始状态

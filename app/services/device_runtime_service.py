@@ -153,3 +153,77 @@ class DeviceRuntimeService:
             if dev.device_code == device_code:
                 return dev
         return None
+    # ==================== A-08: 执行 ControlDecision ====================
+
+    def execute(self, decision) -> Dict[str, Any]:
+        """
+        执行 B 下发的控制决策（A-8）
+        执行后自动保存遥测历史
+
+        Args:
+            decision: ControlDecision 对象
+
+        Returns:
+            dict: {
+                "success": bool,
+                "storage_power_actual_kw": float,
+                "message": str
+            }
+        """
+        try:
+            # 1. 获取当前状态
+            current_state = self.simulator.get_state_without_advance()
+            current_soc = current_state.storage_soc or 50.0
+
+            # 2. 安全限幅（默认限制在 ±10kW，后续由 strategy_repo 读取）
+            target = decision.storage_power_target
+            target = max(-10.0, min(10.0, target))
+
+            # SOC 边界限幅
+            if target > 0 and current_soc <= 20.0:  # 放电时 SOC 过低则停止
+                target = 0.0
+            if target < 0 and current_soc >= 90.0:  # 充电时 SOC 过高则停止
+                target = 0.0
+
+            # 3. 调用 Simulator 执行
+            self.simulator.step_with_control(storage_power_target=target)
+
+            # 4. 获取执行后状态
+            after_state = self.simulator.get_state_without_advance()
+            actual_power = after_state.storage_power
+
+            # 5. 保存遥测历史（A-P0-02: 由 DeviceRuntimeService 统一保存）
+            devices = self.simulator.get_all_devices_state()
+            records = []
+            for dev in devices:
+                records.append(
+                    DeviceTelemetry(
+                        device_code=dev.device_code,
+                        device_type=dev.device_type,
+                        power_kw=dev.power_kw,
+                        voltage_v=dev.voltage_v,
+                        current_a=dev.current_a,
+                        temperature_c=dev.temperature_c,
+                        energy_kwh=dev.energy_kwh,
+                        soc=dev.soc,
+                        soh=dev.soh,
+                        enabled=dev.enabled,
+                        status=dev.status,
+                        quality=dev.quality or "good",
+                    )
+                )
+            self.telemetry_repo.add_many(records)
+
+            # 6. 返回执行结果
+            return {
+                "success": True,
+                "storage_power_actual_kw": actual_power,
+                "message": f"执行成功，储能功率={actual_power:.2f}kW",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "storage_power_actual_kw": 0.0,
+                "message": f"执行失败: {str(e)}",
+            }
