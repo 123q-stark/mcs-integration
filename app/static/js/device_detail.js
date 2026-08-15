@@ -7,6 +7,7 @@ const pathParts = window.location.pathname.split('/');
 const deviceId = pathParts[pathParts.length - 1];
 
 let chartInstance = null;
+let currentDeviceType = null;  // A-P1-04: 存储当前设备类型
 
 function formatDate(dateStr) {
     const date = new Date(dateStr);
@@ -40,6 +41,8 @@ async function loadDeviceDetail() {
             throw new Error(`HTTP ${response.status}`);
         }
         const device = await response.json();
+        // A-P1-04: 保存设备类型供历史图表使用
+        currentDeviceType = device.device_type;
         renderDeviceDetail(device);
         loadDeviceStatus(deviceId);
         loadDeviceHistory(deviceId);
@@ -243,7 +246,8 @@ async function loadDeviceHistory(deviceId) {
         const response = await fetch(`${API_BASE}/${deviceId}/history?hours=24`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        renderHistory(data);
+        // A-P1-04: 传入设备类型用于判断是否显示 SOC
+        renderHistory(data, currentDeviceType);
     } catch (error) {
         console.error('获取历史数据失败:', error);
         document.getElementById('historyNoData').style.display = 'block';
@@ -251,7 +255,9 @@ async function loadDeviceHistory(deviceId) {
     }
 }
 
-function renderHistory(data) {
+// ==================== A-P1-04: Battery 同时画 SOC 与功率 ====================
+
+function renderHistory(data, deviceType) {
     const canvas = document.getElementById('historyChart');
     const noData = document.getElementById('historyNoData');
 
@@ -276,42 +282,125 @@ function renderHistory(data) {
     }
 
     const ctx = canvas.getContext('2d');
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '功率 (kW)',
-                data: powers,
-                borderColor: '#4f8cf7',
-                backgroundColor: 'rgba(79, 140, 247, 0.08)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 1.5,
-                borderWidth: 2,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: true, labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+    const isBattery = (deviceType === 'battery' || deviceType === 'storage');
+
+    if (isBattery) {
+        // A-P1-04: Battery 设备同时显示功率和 SOC（双 Y 轴）
+        const socs = data.data.map(d => d.storage_soc);
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '功率 (kW)',
+                        data: powers,
+                        borderColor: '#4f8cf7',
+                        backgroundColor: 'rgba(79, 140, 247, 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 1.5,
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'SOC (%)',
+                        data: socs,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 1.5,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 120,
-                    grid: { color: 'rgba(0,0,0,0.04)' },
-                    ticks: { font: { size: 10 } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+                    }
                 },
-                x: {
-                    grid: { display: false },
-                    ticks: { font: { size: 9 }, maxTicksLimit: 12 }
-                }
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 } },
+                        title: {
+                            display: true,
+                            text: '功率 (kW)',
+                            font: { size: 10 }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { drawOnChartArea: false },
+                        ticks: { font: { size: 10 } },
+                        title: {
+                            display: true,
+                            text: 'SOC (%)',
+                            font: { size: 10 }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    } else {
+        // 非 Battery 设备：只显示功率
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '功率 (kW)',
+                    data: powers,
+                    borderColor: '#4f8cf7',
+                    backgroundColor: 'rgba(79, 140, 247, 0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 1.5,
+                    borderWidth: 2,
+                }]
             },
-            interaction: { intersect: false, mode: 'index' }
-        }
-    });
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 120,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
