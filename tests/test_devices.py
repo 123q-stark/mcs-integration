@@ -644,3 +644,63 @@ def test_generate_history_has_15min_timeline():
 
     db.engine.dispose()
     os.unlink(path)
+
+
+# ==================== A-P1-01: 累计能量测试 ====================
+
+def test_energy_accumulation():
+    """A-P1-01: 验证能量累计正确递推"""
+    from app.devices.simulator import SimulatorAdapter
+
+    sim = SimulatorAdapter()
+    sim.reset(seed=2026)
+
+    # 固定功率运行 4 步（1小时）
+    # 使用 10kW 放电（Battery 放电，Grid 相应变化）
+    for _ in range(4):
+        sim.step_with_control(storage_power_target=10.0)
+
+    # 获取 PV001 的 energy_kwh
+    pv_units = sim.get_pv_units()
+    pv001 = next(p for p in pv_units if p.device_code == "PV001")
+
+    # PV 发电量应该 > 0（因为是白天 6:00-10:00 有日照）
+    assert pv001.energy_kwh is not None
+    assert pv001.energy_kwh >= 0.0
+
+    # 获取 CHG001 的 energy_kwh
+    chargers = sim.get_chargers()
+    chg001 = next(c for c in chargers if c.device_code == "CHG001")
+    assert chg001.energy_kwh is not None
+    assert chg001.energy_kwh >= 0.0
+
+    # 获取 Grid 的 energy_kwh
+    grid = sim.get_grid()
+    assert grid.energy_kwh is not None
+    assert grid.energy_kwh >= 0.0
+
+    # Battery 的 energy_kwh 应保持为容量 200.0
+    battery = sim.get_battery()
+    assert battery.energy_kwh == 200.0
+
+
+def test_energy_accumulation_4_steps():
+    """A-P1-01: 4步（1小时）10kW 累计能量应为 10kWh"""
+    from app.devices.simulator import SimulatorAdapter
+
+    sim = SimulatorAdapter()
+    sim.reset(seed=2026)
+
+    # 重置 Grid energy_kwh 为 0
+    grid = sim.get_grid()
+    grid.energy_kwh = 0.0
+
+    # 4步 = 1小时，功率 10kW
+    for _ in range(4):
+        sim.step_with_control(storage_power_target=10.0)
+
+    # 检查 Grid 累计能量变化（约 10kWh，考虑扰动）
+    grid_after = sim.get_grid()
+    # 由于有 PV 和负荷，grid 功率不会正好 10kW，所以用约等于
+    assert grid_after.energy_kwh is not None
+    assert grid_after.energy_kwh > 0

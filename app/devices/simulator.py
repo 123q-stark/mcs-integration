@@ -131,6 +131,12 @@ class SimulatorAdapter(DeviceAdapter):
             # 电流 = 功率 / 电压（简化）
             if pv.voltage_v and pv.voltage_v > 0:
                 pv.current_a = round(pv.power_kw / pv.voltage_v * 1000, 2)
+
+            # A-P1-01: 累加累计发电量
+            # E_{k+1} = E_k + |P_k| * Δt
+            energy_delta = abs(pv.power_kw) * self._simulation_step_hours
+            pv.energy_kwh = round((pv.energy_kwh or 0.0) + energy_delta, 2)
+
             pv.timestamp = self._timestamp
             pv.is_online = True
 
@@ -163,6 +169,12 @@ class SimulatorAdapter(DeviceAdapter):
 
             if charger.voltage_v and charger.voltage_v > 0:
                 charger.current_a = round(charger.power_kw / charger.voltage_v * 1000, 2)
+
+            # A-P1-01: 累加累计用电量
+            # E_{k+1} = E_k + |P_k| * Δt
+            energy_delta = abs(charger.power_kw) * self._simulation_step_hours
+            charger.energy_kwh = round((charger.energy_kwh or 0.0) + energy_delta, 2)
+
             charger.timestamp = self._timestamp
             charger.is_online = True
 
@@ -180,6 +192,11 @@ class SimulatorAdapter(DeviceAdapter):
 
         grid_power = load_total - pv_total - battery_power
         self._grid.power_kw = round(grid_power, 2)
+
+        # A-P1-01: 累加累计电网交换电量（绝对值）
+        energy_delta = abs(self._grid.power_kw) * self._simulation_step_hours
+        self._grid.energy_kwh = round((self._grid.energy_kwh or 0.0) + energy_delta, 2)
+
         self._grid.timestamp = self._timestamp
         self._grid.is_online = True
 
@@ -241,6 +258,7 @@ class SimulatorAdapter(DeviceAdapter):
     # 历史保存职责已统一由 DeviceRuntimeService 承担：
     # - generate_history() 使用 telemetry_repo.add_many()
     # - execute() 使用 telemetry_repo.add_many()
+
     def reset(self, seed: Optional[int] = None) -> SystemState:
         """
         重置模拟器到初始状态
@@ -317,10 +335,12 @@ class SimulatorAdapter(DeviceAdapter):
             # Grid
             result.append(self._grid.model_copy(deep=True))
             return result
+
     def get_current_timestamp(self) -> datetime:
         """获取当前仿真时间戳（A-P0-03）"""
         with self._lock:
             return self._timestamp
+
     def step_with_control(
         self,
         storage_power_target: float = 0.0,
