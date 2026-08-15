@@ -1,108 +1,779 @@
+{% extends "base.html" %}
+{% block title %}策略配置 - 光储充管理系统{% endblock %}
+
+{% block content %}
+<!-- Chart.js 用于绘制预测和调度曲线 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    /* ===== 页面顶部（与设备页面风格统一） ===== */
+    .strategy-topbar {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f4f9 100%);
+        border-radius: 16px;
+        padding: 24px 32px;
+        margin-bottom: 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        border: 1px solid #eef2f6;
+    }
+    .strategy-topbar .left h1 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 700;
+        color: #1a2332;
+    }
+    .strategy-topbar .left h1 .icon {
+        margin-right: 8px;
+    }
+    .strategy-topbar .left p {
+        margin: 4px 0 0 0;
+        font-size: 14px;
+        color: #7a8a9b;
+    }
+    .strategy-topbar .right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .strategy-topbar .right .stat-badge {
+        background: #ffffff;
+        padding: 6px 18px;
+        border-radius: 20px;
+        font-size: 14px;
+        color: #1a2332;
+        font-weight: 500;
+        border: 1px solid #eef2f6;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .strategy-topbar .right .stat-badge .num {
+        font-weight: 700;
+        color: #0b1a2b;
+    }
+    .strategy-topbar .right .stat-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+    .strategy-topbar .right .stat-dot.online {
+        background: #10b981;
+    }
+    .strategy-topbar .right .stat-dot.offline {
+        background: #ef4444;
+    }
+    .refresh-btn {
+        background: #ffffff;
+        border: 1px solid #eef2f6;
+        padding: 8px 22px;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #1a2332;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+    .refresh-btn:hover {
+        background: #f1f4f9;
+        border-color: #dce3ec;
+    }
+    .refresh-btn:active {
+        transform: scale(0.96);
+    }
+
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .config-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    .config-section {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #eef2f6;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        transition: box-shadow 0.2s;
+    }
+    .config-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    .config-section h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+        color: #1a2332;
+        font-size: 16px;
+        font-weight: 600;
+        border-bottom: 2px solid #4f8cf7;
+        padding-bottom: 8px;
+    }
+    .config-section.full-width {
+        grid-column: 1 / -1;
+    }
+    .form-group {
+        margin-bottom: 12px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+        color: #333;
+        font-size: 14px;
+    }
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    .form-group input:focus, .form-group select:focus {
+        outline: none;
+        border-color: #4f8cf7;
+        box-shadow: 0 0 0 3px rgba(79, 140, 247, 0.1);
+    }
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    .form-row-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 16px;
+    }
+    .form-row-4 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 16px;
+    }
+    .device-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+    .device-table th {
+        background: #eef2f6;
+        padding: 8px 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #1a2332;
+    }
+    .device-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #eef2f6;
+    }
+    .device-table tr:hover {
+        background: #f8fafc;
+    }
+    .device-table input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    .device-table input[type="number"] {
+        width: 80px;
+        padding: 4px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    .device-table select {
+        padding: 4px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    .btn {
+        padding: 8px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-primary {
+        background: #4f8cf7;
+        color: white;
+    }
+    .btn-primary:hover {
+        background: #3a7ae8;
+    }
+    .btn-success {
+        background: #10b981;
+        color: white;
+    }
+    .btn-success:hover {
+        background: #059669;
+    }
+    .btn-warning {
+        background: #f59e0b;
+        color: white;
+    }
+    .btn-warning:hover {
+        background: #d97706;
+    }
+    .btn-secondary {
+        background: #6b7280;
+        color: white;
+    }
+    .btn-secondary:hover {
+        background: #4b5563;
+    }
+    .btn-sm {
+        padding: 4px 12px;
+        font-size: 12px;
+        border-radius: 4px;
+    }
+    .btn-sm.btn-primary {
+        background: #4f8cf7;
+        color: white;
+    }
+    .btn-sm.btn-primary:hover {
+        background: #3a7ae8;
+    }
+    .button-group {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .status-badge.active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .status-badge.inactive {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 6px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+    }
+    .toast.success {
+        background: #10b981;
+    }
+    .toast.error {
+        background: #ef4444;
+    }
+    .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+    .mode-display {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #eef2f6;
+    }
+    .mode-display .label {
+        font-weight: 600;
+        color: #4b5563;
+    }
+    .mode-display .value {
+        font-weight: 700;
+        color: #1a2332;
+    }
+    .mode-display .value.recommended {
+        color: #4f8cf7;
+    }
+    .readonly-field {
+        background: #f3f4f6;
+        cursor: not-allowed;
+        opacity: 0.8;
+    }
+    .preview-panel {
+        background: #ffffff;
+        border: 1px solid #eef2f6;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .preview-panel h3 {
+        margin-top: 0;
+        color: #1a2332;
+    }
+    .preview-result {
+        background: #f8fafc;
+        padding: 16px;
+        border-radius: 8px;
+        margin-top: 12px;
+        border: 1px solid #eef2f6;
+    }
+    .preview-result .action-tag {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .action-tag.charge {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    .action-tag.discharge {
+        background: #fce4ec;
+        color: #dc2626;
+    }
+    .action-tag.idle {
+        background: #e5e7eb;
+        color: #4b5563;
+    }
+    /* 图表容器样式 */
+    .chart-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 10px;
+    }
+    .chart-box {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 12px;
+        border: 1px solid #eef2f6;
+    }
+    .chart-box h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: #1a2332;
+        font-weight: 600;
+    }
+    .chart-box canvas {
+        width: 100% !important;
+        height: 180px !important;
+    }
+    .forecast-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 12px;
+        flex-wrap: wrap;
+    }
+    .forecast-toolbar .btn {
+        margin: 0;
+    }
+    .forecast-time {
+        color: #7a8a9b;
+        font-size: 13px;
+    }
+    /* 设备配置工具条 */
+    .device-toolbar {
+        display: flex;
+        gap: 12px;
+        margin: 12px 0;
+        flex-wrap: wrap;
+    }
+    @media (max-width: 768px) {
+        .config-grid {
+            grid-template-columns: 1fr;
+        }
+        .form-row, .form-row-3, .form-row-4 {
+            grid-template-columns: 1fr;
+        }
+        .device-table {
+            font-size: 12px;
+        }
+        .device-table input[type="number"] {
+            width: 60px;
+        }
+        .chart-container {
+            grid-template-columns: 1fr;
+        }
+        .strategy-topbar {
+            padding: 16px 20px;
+        }
+        .strategy-topbar .left h1 {
+            font-size: 20px;
+        }
+    }
+</style>
+
+<div class="container">
+    <!-- ===== 页面顶部（统一风格） ===== -->
+    <div class="strategy-topbar">
+        <div class="left">
+            <h1><span class="icon">⚙️</span> 策略配置中心</h1>
+            <p>配置 5PV、5Charger、Battery、Grid、电价和运行模式</p>
+        </div>
+        <div class="right">
+            <span class="stat-badge">
+                <span class="stat-dot online" id="header-status-dot"></span>
+                <span id="header-status-text">策略就绪</span>
+            </span>
+            <span class="stat-badge">
+                模式: <span class="num" id="header-mode">AUTO</span>
+            </span>
+            <button class="refresh-btn" onclick="refreshResult()">🔄 刷新</button>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+
+    <!-- 配置网格 -->
+    <div class="config-grid">
+
+        <!-- ===== 区域 ①：运行模式 ===== -->
+        <div class="config-section">
+            <h3>① 运行模式</h3>
+            <div class="form-group">
+                <label for="requested-mode">请求模式 (requested_mode)</label>
+                <select id="requested-mode">
+                    <option value="AUTO">AUTO（自动）</option>
+                    <option value="PV_PRIORITY">PV_PRIORITY（光伏优先）</option>
+                    <option value="ECONOMIC_SCHEDULE">ECONOMIC_SCHEDULE（经济调度）</option>
+                    <option value="GRID_BACKUP">GRID_BACKUP（电网备用）</option>
+                    <option value="SAFE">SAFE（安全模式）</option>
+                </select>
+            </div>
+            <div class="mode-display">
+                <span class="label">有效模式 (effective_mode)：</span>
+                <span class="value" id="effective-mode-display">AUTO</span>
+            </div>
+            <div class="mode-display">
+                <span class="label">策略状态：</span>
+                <span id="strategy-status" class="status-badge active">就绪</span>
+            </div>
+            <button class="btn btn-primary" onclick="saveMode()">💾 保存模式</button>
+        </div>
+
+        <!-- ===== 区域 ②：5 路 PV 策略配置（动态渲染） ===== -->
+        <div class="config-section">
+            <h3>② 5 路 PV 策略配置</h3>
+            <table class="device-table">
+                <thead>
+                    <tr>
+                        <th>设备</th>
+                        <th>参与策略</th>
+                        <th>允许策略控制</th>
+                        <th>优先级</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="pv-config-table">
+                    <!-- 由 JavaScript 动态渲染 -->
+                </tbody>
+            </table>
+            <p style="color:#7a8a9b;font-size:13px;margin-top:8px;">PV 仅可配置“参与策略”，不执行自动弃光</p>
+        </div>
+
+        <!-- ===== 区域 ③：5 个 Charger 策略配置（动态渲染） ===== -->
+        <div class="config-section">
+            <h3>③ 5 个充电桩策略配置</h3>
+            <table class="device-table">
+                <thead>
+                    <tr>
+                        <th>设备</th>
+                        <th>参与策略</th>
+                        <th>允许策略控制</th>
+                        <th>功率上限</th>
+                        <th>优先级</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="charger-config-table">
+                    <!-- 由 JavaScript 动态渲染 -->
+                </tbody>
+            </table>
+            <p style="color:#7a8a9b;font-size:13px;margin-top:8px;">Charger 配置可编辑，保存后 A 设备详情页同步显示</p>
+        </div>
+
+        <!-- 设备配置工具条 -->
+        <div class="config-section full-width">
+            <div class="device-toolbar">
+                <button class="btn btn-success" onclick="saveAllDeviceConfigs()">💾 保存所有设备配置</button>
+                <button class="btn btn-secondary" onclick="loadDeviceConfigs()">🔄 重新加载</button>
+            </div>
+        </div>
+
+        <!-- ===== 区域 ④：Battery 策略配置 ===== -->
+        <div class="config-section">
+            <h3>④ Battery 策略配置</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="batt-soc-min">SOC 下限 (%)</label>
+                    <input type="number" id="batt-soc-min" value="20" min="0" max="100" step="1">
+                </div>
+                <div class="form-group">
+                    <label for="batt-soc-max">SOC 上限 (%)</label>
+                    <input type="number" id="batt-soc-max" value="90" min="0" max="100" step="1">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="batt-charge-power">最大充电功率 (kW)</label>
+                    <input type="number" id="batt-charge-power" value="10" min="0" max="50" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label for="batt-discharge-power">最大放电功率 (kW)</label>
+                    <input type="number" id="batt-discharge-power" value="10" min="0" max="50" step="0.5">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="batt-backup-soc">备用 SOC 目标 (%)</label>
+                <input type="number" id="batt-backup-soc" value="50" min="0" max="100" step="1">
+            </div>
+            <button class="btn btn-warning" onclick="saveBatteryConfig()">💾 保存 Battery 配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑤：Grid 策略配置 ===== -->
+        <div class="config-section">
+            <h3>⑤ Grid 策略配置</h3>
+            <div class="form-group">
+                <label for="grid-max-import">最大购电功率 (kW)</label>
+                <input type="number" id="grid-max-import" value="300" min="0" max="1000" step="10">
+            </div>
+            <div class="form-group">
+                <label for="grid-allow-export">
+                    <input type="checkbox" id="grid-allow-export" checked>
+                    允许向电网送电
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="grid-max-export">最大上网功率 (kW)</label>
+                <input type="number" id="grid-max-export" value="100" min="0" max="500" step="10">
+            </div>
+            <button class="btn btn-warning" onclick="saveGridConfig()">💾 保存 Grid 配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑥：Price 配置 ===== -->
+        <div class="config-section">
+            <h3>⑥ 电价配置</h3>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label for="price-valley">谷价 (CNY/kWh)</label>
+                    <input type="number" id="price-valley" value="0.35" min="0" max="10" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="price-flat">平价 (CNY/kWh)</label>
+                    <input type="number" id="price-flat" value="0.55" min="0" max="10" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="price-peak">峰价 (CNY/kWh)</label>
+                    <input type="number" id="price-peak" value="0.85" min="0" max="10" step="0.01">
+                </div>
+            </div>
+            <div class="mode-display">
+                <span class="label">当前时段价格：</span>
+                <span class="value" id="current-price-display">0.55 CNY/kWh</span>
+            </div>
+            <button class="btn btn-warning" onclick="savePriceConfig()">💾 保存电价配置</button>
+        </div>
+
+        <!-- ===== 区域 ⑦：策略结果口（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>⑦ STRATEGY 结果口</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div><strong>当前算法：</strong><span id="result-algorithm">FixedRule</span></div>
+                <div><strong>请求模式：</strong><span id="result-requested-mode">AUTO</span></div>
+                <div><strong>有效模式：</strong><span id="result-effective-mode">AUTO</span></div>
+                <div><strong>是否 Fallback：</strong><span id="result-fallback">否</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div><strong>当前 Storage Target：</strong><span id="result-storage-target">0.0 kW</span></div>
+                <div><strong>最后运行时间：</strong><span id="result-last-run">-</span></div>
+            </div>
+            <div style="margin-bottom:12px;">
+                <strong>当前决策说明：</strong>
+                <span id="result-message">等待策略运行...</span>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="runStrategy()">▶️ 运行一次策略</button>
+                <button class="btn btn-secondary" onclick="refreshResult()">🔄 刷新结果</button>
+            </div>
+        </div>
+
+        <!-- ===== v1.3 预测曲线展示（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>📈 次日负荷与 PV 预测</h3>
+            <div class="chart-container">
+                <div class="chart-box">
+                    <h4>负荷预测 (kW)</h4>
+                    <canvas id="loadForecastChart" height="180"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h4>PV 预测 (kW)</h4>
+                    <canvas id="pvForecastChart" height="180"></canvas>
+                </div>
+            </div>
+            <div class="forecast-toolbar">
+                <button class="btn btn-primary" onclick="fetchForecast()">🔄 刷新预测</button>
+                <span class="forecast-time" id="forecastTime">未加载</span>
+            </div>
+        </div>
+
+        <!-- ===== v1.4 调度计划展示（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>📊 储能调度计划（24小时）</h3>
+            <div class="chart-container">
+                <div class="chart-box">
+                    <h4>储能功率计划</h4>
+                    <canvas id="schedulePowerChart" height="180"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h4>预测 SOC</h4>
+                    <canvas id="scheduleSocChart" height="180"></canvas>
+                </div>
+            </div>
+            <div class="forecast-toolbar">
+                <button class="btn btn-primary" onclick="fetchSchedule()">🔄 刷新调度计划</button>
+                <span class="forecast-time" id="scheduleTime">未加载</span>
+            </div>
+        </div>
+
+        <!-- ===== 预览面板（全宽） ===== -->
+        <div class="config-section full-width">
+            <h3>🔮 策略预览</h3>
+            <p style="color:#7a8a9b;font-size:14px;">输入模拟状态，查看当前策略会做出什么决策</p>
+            <form id="preview-form">
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label for="pv-power">光伏功率 (kW)</label>
+                        <input type="number" id="pv-power" value="40" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="load-power">负载功率 (kW)</label>
+                        <input type="number" id="load-power" value="30" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="storage-power">储能功率 (kW)</label>
+                        <input type="number" id="storage-power" value="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="storage-soc">储能 SOC (%)</label>
+                        <input type="number" id="storage-soc" value="50" min="0" max="100" step="0.1">
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn btn-success" id="preview-btn">▶️ 预览决策</button>
+                </div>
+            </form>
+            <div id="preview-result" class="preview-result" style="display:none;">
+                <h4>决策结果</h4>
+                <div id="preview-content">
+                    <p><strong>动作：</strong><span id="preview-action" class="action-tag"></span></p>
+                    <p><strong>目标功率：</strong><span id="preview-power"></span> kW</p>
+                    <p><strong>说明：</strong><span id="preview-message"></span></p>
+                    <p style="color:#7a8a9b;font-size:13px;"><strong>时间：</strong><span id="preview-time"></span></p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 全部 JavaScript 已内联至此，不再依赖外部 strategy.js        -->
+<!-- ============================================================ -->
+<script>
 // ============================================================
-// v1.5 策略页面 - 唯一 JavaScript 事实源
-// 整合自 strategy.html 内联 + 原 strategy.js
+// v1.5 策略页面 - 完整内联 JavaScript（解决加载问题）
 // ============================================================
 
 // ============ 工具函数 ============
-function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
+function showToast(message, type) {
+    if (type === undefined) type = 'success';
+    var toast = document.getElementById('toast');
     if (!toast) return;
     toast.textContent = message;
     toast.className = 'toast ' + type + ' show';
-    setTimeout(() => {
+    setTimeout(function() {
         toast.classList.remove('show');
     }, 3000);
 }
 
-function getApiBase() {
-    return '/api/strategies';
-}
-
-async function fetchJson(url, options = {}) {
-    const response = await fetch(url, options);
+async function fetchJson(url, options) {
+    if (options === undefined) options = {};
+    var response = await fetch(url, options);
     if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error('HTTP ' + response.status + ': ' + response.statusText);
     }
     return response.json();
 }
 
-// ============ 配置加载 ============
-async function loadDefaultConfigs() {
-    try {
-        // 加载电价
-        const priceData = await fetchJson('/api/strategies/price-config');
-        document.getElementById('price-valley').value = priceData.valley_price;
-        document.getElementById('price-flat').value = priceData.flat_price;
-        document.getElementById('price-peak').value = priceData.peak_price;
-
-        // 加载 Grid
-        const gridData = await fetchJson('/api/strategies/grid-config');
-        document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
-        document.getElementById('grid-allow-export').checked = gridData.allow_export;
-        document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
-
-        // 加载策略配置
-        const configData = await fetchJson('/api/strategies/config');
-        document.getElementById('batt-soc-min').value = configData.soc_min;
-        document.getElementById('batt-soc-max').value = configData.soc_max;
-        document.getElementById('batt-charge-power').value = configData.charge_power_kw;
-        document.getElementById('batt-discharge-power').value = configData.discharge_power_kw;
-        document.getElementById('batt-backup-soc').value = configData.backup_soc_target || 50;
-        document.getElementById('requested-mode').value = configData.requested_mode || 'AUTO';
-        document.getElementById('effective-mode-display').textContent = configData.requested_mode || 'AUTO';
-        document.getElementById('header-mode').textContent = configData.requested_mode || 'AUTO';
-
-        // 加载设备策略配置
-        await loadDeviceConfigs();
-    } catch (error) {
-        console.error('加载配置失败:', error);
-        showToast('加载配置失败', 'error');
-    }
-}
-
-// ============ B-P1-01: 设备配置渲染与保存 ============
-// 用于暂存未保存的修改
-const deviceConfigChanges = {};
+// ============ 设备配置渲染与保存 ============
+var deviceConfigChanges = {};
 
 async function loadDeviceConfigs() {
     try {
-        const data = await fetchJson('/api/strategies/device-configs');
+        var data = await fetchJson('/api/strategies/device-configs');
         
         // 渲染 PV 表格
-        const pvConfigs = data.filter(c => c.device_code.startsWith('PV'));
-        const pvTbody = document.getElementById('pv-config-table');
+        var pvConfigs = data.filter(function(c) {
+            return c.device_code.startsWith('PV');
+        });
+        var pvTbody = document.getElementById('pv-config-table');
         if (pvTbody) {
-            pvTbody.innerHTML = pvConfigs.map(c => `
-                <tr>
-                    <td><strong>${c.device_code}</strong></td>
-                    <td><input type="checkbox" ${c.participate_in_strategy ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'participate_in_strategy', this.checked)"></td>
-                    <td><input type="checkbox" ${c.allow_strategy_control ? 'checked' : ''} disabled></td>
-                    <td><input type="number" value="${c.priority}" min="1" max="5" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'priority', parseInt(this.value))"></td>
-                    <td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig('${c.device_code}')">💾 保存</button></td>
-                </tr>
-            `).join('');
+            var pvHtml = '';
+            for (var i = 0; i < pvConfigs.length; i++) {
+                var c = pvConfigs[i];
+                var checked = c.participate_in_strategy ? 'checked' : '';
+                pvHtml += '<tr>';
+                pvHtml += '<td><strong>' + c.device_code + '</strong></td>';
+                pvHtml += '<td><input type="checkbox" ' + checked + ' onchange="updateDeviceConfig(\'' + c.device_code + '\', \'participate_in_strategy\', this.checked)"></td>';
+                pvHtml += '<td><input type="checkbox" ' + (c.allow_strategy_control ? 'checked' : '') + ' disabled></td>';
+                pvHtml += '<td><input type="number" value="' + c.priority + '" min="1" max="5" onchange="updateDeviceConfig(\'' + c.device_code + '\', \'priority\', parseInt(this.value))"></td>';
+                pvHtml += '<td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig(\'' + c.device_code + '\')">💾 保存</button></td>';
+                pvHtml += '</tr>';
+            }
+            pvTbody.innerHTML = pvHtml;
         }
 
         // 渲染 Charger 表格
-        const chargerConfigs = data.filter(c => c.device_code.startsWith('CHG'));
-        const chargerTbody = document.getElementById('charger-config-table');
+        var chargerConfigs = data.filter(function(c) {
+            return c.device_code.startsWith('CHG');
+        });
+        var chargerTbody = document.getElementById('charger-config-table');
         if (chargerTbody) {
-            chargerTbody.innerHTML = chargerConfigs.map(c => `
-                <tr>
-                    <td><strong>${c.device_code}</strong></td>
-                    <td><input type="checkbox" ${c.participate_in_strategy ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'participate_in_strategy', this.checked)"></td>
-                    <td><input type="checkbox" ${c.allow_strategy_control ? 'checked' : ''} 
-                               onchange="updateDeviceConfig('${c.device_code}', 'allow_strategy_control', this.checked)"></td>
-                    <td><input type="number" value="${c.strategy_power_limit_kw || 50}" min="0" max="200" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'strategy_power_limit_kw', parseFloat(this.value))"></td>
-                    <td><input type="number" value="${c.priority}" min="1" max="5" 
-                               onchange="updateDeviceConfig('${c.device_code}', 'priority', parseInt(this.value))"></td>
-                    <td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig('${c.device_code}')">💾 保存</button></td>
-                </tr>
-            `).join('');
+            var chargerHtml = '';
+            for (var j = 0; j < chargerConfigs.length; j++) {
+                var c2 = chargerConfigs[j];
+                var checked1 = c2.participate_in_strategy ? 'checked' : '';
+                var checked2 = c2.allow_strategy_control ? 'checked' : '';
+                var limitVal = c2.strategy_power_limit_kw || 50;
+                chargerHtml += '<tr>';
+                chargerHtml += '<td><strong>' + c2.device_code + '</strong></td>';
+                chargerHtml += '<td><input type="checkbox" ' + checked1 + ' onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'participate_in_strategy\', this.checked)"></td>';
+                chargerHtml += '<td><input type="checkbox" ' + checked2 + ' onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'allow_strategy_control\', this.checked)"></td>';
+                chargerHtml += '<td><input type="number" value="' + limitVal + '" min="0" max="200" onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'strategy_power_limit_kw\', parseFloat(this.value))"></td>';
+                chargerHtml += '<td><input type="number" value="' + c2.priority + '" min="1" max="5" onchange="updateDeviceConfig(\'' + c2.device_code + '\', \'priority\', parseInt(this.value))"></td>';
+                chargerHtml += '<td><button class="btn btn-sm btn-primary" onclick="saveDeviceConfig(\'' + c2.device_code + '\')">💾 保存</button></td>';
+                chargerHtml += '</tr>';
+            }
+            chargerTbody.innerHTML = chargerHtml;
         }
     } catch (error) {
         console.error('加载设备配置失败:', error);
@@ -118,52 +789,58 @@ function updateDeviceConfig(deviceCode, field, value) {
 }
 
 async function saveDeviceConfig(deviceCode) {
-    const changes = deviceConfigChanges[deviceCode] || {};
-    if (Object.keys(changes).length === 0) {
+    var changes = deviceConfigChanges[deviceCode] || {};
+    var keys = Object.keys(changes);
+    if (keys.length === 0) {
         showToast('没有需要保存的修改', 'warning');
         return;
     }
     
-    const btn = event?.target;
-    if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+    var btn = event ? event.target : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+    }
     
     try {
-        await fetchJson(`/api/strategies/device-configs/${deviceCode}`, {
+        await fetchJson('/api/strategies/device-configs/' + deviceCode, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(changes)
         });
-        
         delete deviceConfigChanges[deviceCode];
-        showToast(`${deviceCode} 配置已保存`);
+        showToast(deviceCode + ' 配置已保存');
         await loadDeviceConfigs();
     } catch (error) {
         console.error('保存失败:', error);
         showToast('保存失败: ' + error.message, 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '💾 保存'; }
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '💾 保存';
+        }
     }
 }
 
 async function saveAllDeviceConfigs() {
-    const allChanges = Object.keys(deviceConfigChanges);
+    var allChanges = Object.keys(deviceConfigChanges);
     if (allChanges.length === 0) {
         showToast('没有需要保存的修改', 'warning');
         return;
     }
     
     try {
-        for (const deviceCode of allChanges) {
-            const changes = deviceConfigChanges[deviceCode];
-            await fetchJson(`/api/strategies/device-configs/${deviceCode}`, {
+        for (var i = 0; i < allChanges.length; i++) {
+            var deviceCode = allChanges[i];
+            var changes = deviceConfigChanges[deviceCode];
+            await fetchJson('/api/strategies/device-configs/' + deviceCode, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(changes)
             });
         }
-        // 清空所有暂存
-        for (const key of allChanges) {
-            delete deviceConfigChanges[key];
+        for (var j = 0; j < allChanges.length; j++) {
+            delete deviceConfigChanges[allChanges[j]];
         }
         showToast('所有配置已保存');
         await loadDeviceConfigs();
@@ -173,41 +850,44 @@ async function saveAllDeviceConfigs() {
     }
 }
 
-// ============ 配置保存（原有） ============
-function getFormData() {
-    return {
-        config_name: 'default',
-        soc_min: parseFloat(document.getElementById('batt-soc-min').value),
-        soc_max: parseFloat(document.getElementById('batt-soc-max').value),
-        charge_power_kw: parseFloat(document.getElementById('batt-charge-power').value),
-        discharge_power_kw: parseFloat(document.getElementById('batt-discharge-power').value),
-        backup_soc_target: parseFloat(document.getElementById('batt-backup-soc').value),
-        requested_mode: document.getElementById('requested-mode').value,
-    };
-}
-
-async function saveConfig() {
+// ============ 加载所有配置 ============
+async function loadDefaultConfigs() {
     try {
-        const data = getFormData();
-        await fetchJson('/api/strategies/config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        showToast('配置已保存');
+        var priceData = await fetchJson('/api/strategies/price-config');
+        document.getElementById('price-valley').value = priceData.valley_price;
+        document.getElementById('price-flat').value = priceData.flat_price;
+        document.getElementById('price-peak').value = priceData.peak_price;
+
+        var gridData = await fetchJson('/api/strategies/grid-config');
+        document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
+        document.getElementById('grid-allow-export').checked = gridData.allow_export;
+        document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
+
+        var configData = await fetchJson('/api/strategies/config');
+        document.getElementById('batt-soc-min').value = configData.soc_min;
+        document.getElementById('batt-soc-max').value = configData.soc_max;
+        document.getElementById('batt-charge-power').value = configData.charge_power_kw;
+        document.getElementById('batt-discharge-power').value = configData.discharge_power_kw;
+        document.getElementById('batt-backup-soc').value = configData.backup_soc_target || 50;
+        document.getElementById('requested-mode').value = configData.requested_mode || 'AUTO';
+        document.getElementById('effective-mode-display').textContent = configData.requested_mode || 'AUTO';
+        document.getElementById('header-mode').textContent = configData.requested_mode || 'AUTO';
+
+        await loadDeviceConfigs();
     } catch (error) {
-        console.error('保存配置失败:', error);
-        showToast('保存失败', 'error');
+        console.error('加载配置失败:', error);
+        showToast('加载配置失败', 'error');
     }
 }
 
+// ============ 模式保存 ============
 async function saveMode() {
-    const mode = document.getElementById('requested-mode').value;
+    var mode = document.getElementById('requested-mode').value;
     try {
-        const data = await fetchJson('/api/strategies/mode', {
+        var data = await fetchJson('/api/strategies/mode', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requested_mode: mode }),
+            body: JSON.stringify({ requested_mode: mode })
         });
         document.getElementById('effective-mode-display').textContent = data.effective_mode || mode;
         document.getElementById('header-mode').textContent = data.effective_mode || mode;
@@ -217,57 +897,65 @@ async function saveMode() {
     }
 }
 
-async function saveBatteryConfig() {
-    await saveConfig();
+function saveBatteryConfig() {
+    var data = {
+        soc_min: parseFloat(document.getElementById('batt-soc-min').value),
+        soc_max: parseFloat(document.getElementById('batt-soc-max').value),
+        charge_power_kw: parseFloat(document.getElementById('batt-charge-power').value),
+        discharge_power_kw: parseFloat(document.getElementById('batt-discharge-power').value),
+        backup_soc_target: parseFloat(document.getElementById('batt-backup-soc').value)
+    };
+    fetch('/api/strategies/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_name: 'default', soc_min: data.soc_min, soc_max: data.soc_max, charge_power_kw: data.charge_power_kw, discharge_power_kw: data.discharge_power_kw, backup_soc_target: data.backup_soc_target })
+    })
+    .then(function() { showToast('Battery 配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
-async function saveGridConfig() {
-    const data = {
+function saveGridConfig() {
+    var data = {
         max_import_power_kw: parseFloat(document.getElementById('grid-max-import').value),
         allow_export: document.getElementById('grid-allow-export').checked,
-        max_export_power_kw: parseFloat(document.getElementById('grid-max-export').value),
+        max_export_power_kw: parseFloat(document.getElementById('grid-max-export').value)
     };
-    try {
-        await fetchJson('/api/strategies/grid-config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        showToast('Grid 配置已保存');
-    } catch (error) {
-        showToast('保存失败', 'error');
-    }
+    fetch('/api/strategies/grid-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function() { showToast('Grid 配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
-async function savePriceConfig() {
-    const data = {
+function savePriceConfig() {
+    var data = {
         valley_price: parseFloat(document.getElementById('price-valley').value),
         flat_price: parseFloat(document.getElementById('price-flat').value),
-        peak_price: parseFloat(document.getElementById('price-peak').value),
+        peak_price: parseFloat(document.getElementById('price-peak').value)
     };
-    try {
-        await fetchJson('/api/strategies/price-config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        showToast('电价配置已保存');
-    } catch (error) {
-        showToast('保存失败', 'error');
-    }
+    fetch('/api/strategies/price-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function() { showToast('电价配置已保存'); })
+    .catch(function() { showToast('保存失败', 'error'); });
 }
 
 // ============ 策略运行 ============
 async function runStrategy() {
-    const btn = event.target;
-    btn.disabled = true;
-    btn.textContent = '运行中...';
+    var btn = event ? event.target : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '运行中...';
+    }
     try {
-        const data = await fetchJson('/api/strategies/run', { method: 'POST' });
-        document.getElementById('result-storage-target').textContent = (data.decision?.storage_power_target || 0) + ' kW';
-        document.getElementById('result-message').textContent = data.decision?.message || data.message || '无消息';
+        var data = await fetchJson('/api/strategies/run', { method: 'POST' });
+        document.getElementById('result-storage-target').textContent = (data.decision ? data.decision.storage_power_target : 0) + ' kW';
+        document.getElementById('result-message').textContent = (data.decision ? data.decision.message : data.message) || '无消息';
         document.getElementById('result-last-run').textContent = new Date().toLocaleString();
-
         if (data.decision && data.decision.source) {
             document.getElementById('result-algorithm').textContent = data.decision.source;
         }
@@ -288,14 +976,16 @@ async function runStrategy() {
         document.getElementById('header-status-text').textContent = '运行失败';
         document.getElementById('header-status-dot').className = 'stat-dot offline';
     } finally {
-        btn.disabled = false;
-        btn.textContent = '▶️ 运行一次策略';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '▶️ 运行一次策略';
+        }
     }
 }
 
 async function refreshResult() {
     try {
-        const data = await fetchJson('/api/strategies/runtime');
+        var data = await fetchJson('/api/strategies/runtime');
         document.getElementById('result-algorithm').textContent = data.source || 'FixedRule';
         document.getElementById('result-requested-mode').textContent = data.requested_mode || 'AUTO';
         document.getElementById('result-effective-mode').textContent = data.effective_mode || 'AUTO';
@@ -314,22 +1004,20 @@ async function refreshResult() {
     }
 }
 
-// ============ v1.3 预测曲线 ============
-let loadChart = null;
-let pvChart = null;
+// ============ 预测曲线 ============
+var loadChart = null;
+var pvChart = null;
 
 async function fetchForecast() {
     try {
-        const loadData = await fetchJson('/api/strategies/forecast/load');
-        const pvData = await fetchJson('/api/strategies/forecast/pv');
-
-        const labels = loadData.points.map(p => {
-            const dt = new Date(p.timestamp);
+        var loadData = await fetchJson('/api/strategies/forecast/load');
+        var pvData = await fetchJson('/api/strategies/forecast/pv');
+        var labels = loadData.points.map(function(p) {
+            var dt = new Date(p.timestamp);
             return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
         });
-        const loadValues = loadData.points.map(p => p.value_kw);
-        const pvValues = pvData.points.map(p => p.value_kw);
-
+        var loadValues = loadData.points.map(function(p) { return p.value_kw; });
+        var pvValues = pvData.points.map(function(p) { return p.value_kw; });
         updateChart('loadForecastChart', '负荷预测 (kW)', labels, loadValues, loadChart, '#4f8cf7');
         updateChart('pvForecastChart', 'PV 预测 (kW)', labels, pvValues, pvChart, '#f59e0b');
         document.getElementById('forecastTime').textContent = '更新于: ' + new Date().toLocaleString();
@@ -340,13 +1028,13 @@ async function fetchForecast() {
 }
 
 function updateChart(canvasId, label, labels, values, chartInstance, color) {
-    const canvas = document.getElementById(canvasId);
+    var canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    var ctx = canvas.getContext('2d');
     if (chartInstance) {
         chartInstance.destroy();
     }
-    const newChart = new Chart(ctx, {
+    var newChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -377,21 +1065,19 @@ function updateChart(canvasId, label, labels, values, chartInstance, color) {
     }
 }
 
-// ============ v1.4 调度计划 ============
-let schedulePowerChart = null;
-let scheduleSocChart = null;
+var schedulePowerChart = null;
+var scheduleSocChart = null;
 
 async function fetchSchedule() {
     try {
-        const data = await fetchJson('/api/strategies/schedule');
+        var data = await fetchJson('/api/strategies/schedule');
         if (data.schedule && data.schedule.length > 0) {
-            const labels = data.schedule.map(item => {
-                const dt = new Date(item.timestamp);
+            var labels = data.schedule.map(function(item) {
+                var dt = new Date(item.timestamp);
                 return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             });
-            const powerValues = data.schedule.map(item => item.power);
-            const socValues = data.schedule.map(item => item.soc);
-
+            var powerValues = data.schedule.map(function(item) { return item.power; });
+            var socValues = data.schedule.map(function(item) { return item.soc; });
             updateScheduleChart('schedulePowerChart', '储能功率 (kW)', labels, powerValues, schedulePowerChart, '#10b981', '#10b98133');
             updateScheduleChart('scheduleSocChart', 'SOC (%)', labels, socValues, scheduleSocChart, '#6366f1', '#6366f133');
             document.getElementById('scheduleTime').textContent = '更新于: ' + new Date(data.created_at).toLocaleString();
@@ -405,13 +1091,13 @@ async function fetchSchedule() {
 }
 
 function updateScheduleChart(canvasId, label, labels, values, chartInstance, color, fillColor) {
-    const canvas = document.getElementById(canvasId);
+    var canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    var ctx = canvas.getContext('2d');
     if (chartInstance) {
         chartInstance.destroy();
     }
-    const newChart = new Chart(ctx, {
+    var newChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -453,7 +1139,7 @@ function getPreviewData() {
 }
 
 function displayPreviewResult(result) {
-    const actionEl = document.getElementById('preview-action');
+    var actionEl = document.getElementById('preview-action');
     actionEl.textContent = result.action;
     actionEl.className = 'action-tag ' + result.action;
     document.getElementById('preview-power').textContent = result.storage_power_target;
@@ -464,11 +1150,11 @@ function displayPreviewResult(result) {
 
 async function previewDecision() {
     try {
-        const data = getPreviewData();
-        const result = await fetchJson('/api/strategies/preview', {
+        var data = getPreviewData();
+        var result = await fetchJson('/api/strategies/preview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
+            body: JSON.stringify(data)
         });
         displayPreviewResult(result);
     } catch (error) {
@@ -483,9 +1169,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(fetchForecast, 300);
     setTimeout(fetchSchedule, 600);
 
-    // 预览表单提交
-    document.getElementById('preview-form')?.addEventListener('submit', function(e) {
-        e.preventDefault();
-        previewDecision();
-    });
+    var form = document.getElementById('preview-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            previewDecision();
+        });
+    }
 });
+</script>
+
+{% endblock %}
+{% block scripts %}
+<!-- 所有 JS 已内联，不再依赖外部文件 -->
+{% endblock %}
