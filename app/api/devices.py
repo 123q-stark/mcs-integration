@@ -80,7 +80,7 @@ def get_device_status(
         )
 
 
-# ==================== A-06: 设备历史数据接口（使用 DeviceTelemetry） ====================
+# ==================== A-P1-05: 设备历史数据接口（兼容 limit 和 hours） ====================
 from app.models.device_telemetry import DeviceTelemetry
 from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 from datetime import datetime, timedelta
@@ -90,13 +90,15 @@ from datetime import datetime, timedelta
 def get_device_history(
     device_id: int,
     request: Request,
-    hours: int = 24,
+    limit: Optional[int] = None,  # A-P1-05: 新增 limit 参数，优先使用
+    hours: int = 24,              # A-P1-05: 保留 hours 作为兼容参数
     db: Session = Depends(get_db),
 ):
     """
-    获取设备历史数据
-    - **device_id**: 设备 ID
-    - **hours**: 查询过去 N 小时的数据（默认 24，最大 720 = 30天）
+    获取设备历史数据（A-P1-05: 支持 limit 和 hours 两种方式）
+
+    - **limit**: 返回记录数（1~2880），优先使用
+    - **hours**: 查询过去 N 小时的数据（默认 24），当 limit 未提供时使用
     """
     # 1. 检查设备是否存在
     repo = DeviceRepository(db)
@@ -107,28 +109,35 @@ def get_device_history(
             detail=f"设备 ID {device_id} 不存在",
         )
 
-    # 2. 限制查询范围（1~720小时，即15分钟~30天）
-    if hours > 720:
-        hours = 720
-    if hours < 1:
-        hours = 1
+    # 2. A-P1-05: 确定实际 limit 值
+    if limit is not None:
+        # limit 优先，限制范围 1~2880（30天 × 96点）
+        if limit < 1:
+            limit = 1
+        if limit > 2880:
+            limit = 2880
+    else:
+        # hours 作为兼容参数，转换为 limit
+        if hours > 720:
+            hours = 720
+        if hours < 1:
+            hours = 1
+        limit = hours * 4
 
-    # 3. 计算记录数（15分钟步长 = 4条/小时）
-    limit = hours * 4
-
-    # 4. 通过 DeviceTelemetryRepository 查询
+    # 3. 通过 DeviceTelemetryRepository 查询
     telemetry_repo = DeviceTelemetryRepository(db)
     records = telemetry_repo.get_history(
         device_code=device.device_code,
         limit=limit,
     )
 
-    # 5. 构造返回数据
+    # 4. 构造返回数据
     return {
         "device_id": device_id,
         "device_code": device.device_code,
         "device_type": device.device_type,
         "device_name": device.device_name,
+        "limit": limit,  # A-P1-05: 返回实际使用的 limit 值
         "data": [
             {
                 "time": r.created_at.isoformat(),
