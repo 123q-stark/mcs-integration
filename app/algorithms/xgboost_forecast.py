@@ -8,7 +8,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from .interfaces import LoadForecaster, PVForecaster
@@ -70,7 +70,7 @@ class XGBoostLoadForecaster(LoadForecaster):
         self.model_store.save_model(self.model, model_name=f"xgboost_load", meta={
             'target': 'load',
             'feature_names': self.feature_names,
-            'trained_at': datetime.utcnow().isoformat(),
+            'trained_at': datetime.now(timezone.utc).isoformat(),
             'history_start': history['timestamp'].min().isoformat(),
             'history_end': history['timestamp'].max().isoformat()
         })
@@ -188,7 +188,7 @@ class XGBoostLoadForecaster(LoadForecaster):
         return ForecastResult(
             model_name="XGBoostLoad",
             target="load",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             step_minutes=15,
             points=points,
             mae=None,
@@ -243,7 +243,7 @@ class XGBoostPVForecaster(PVForecaster):
         self.model_store.save_model(self.model, model_name="xgboost_pv", meta={
             'target': 'pv',
             'feature_names': self.feature_names,
-            'trained_at': datetime.utcnow().isoformat(),
+            'trained_at': datetime.now(timezone.utc).isoformat(),
             'history_start': history['timestamp'].min().isoformat(),
             'history_end': history['timestamp'].max().isoformat()
         })
@@ -295,7 +295,7 @@ class XGBoostPVForecaster(PVForecaster):
         return ForecastResult(
             model_name="XGBoostPV",
             target="pv",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             step_minutes=15,
             points=points,
             mae=None,

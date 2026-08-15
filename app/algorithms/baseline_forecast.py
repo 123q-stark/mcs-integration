@@ -2,7 +2,7 @@
 历史同slot基线预测：用最近 N 天同一时刻的平均值作为预测。
 """
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 
 from .interfaces import LoadForecaster, PVForecaster
@@ -66,7 +66,7 @@ class HistoricalSameSlotBaseline(LoadForecaster, PVForecaster):
         return ForecastResult(
             model_name=f"HistoricalSameSlotBaseline_{target}",
             target=target,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             step_minutes=15,
             points=points,
             mae=None,

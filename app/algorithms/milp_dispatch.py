@@ -4,7 +4,7 @@ MILP 储能调度优化器（使用 scipy.optimize.milp + HiGHS）。
 """
 import numpy as np
 from scipy.optimize import milp, LinearConstraint, Bounds
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any
 
 from .interfaces import EnergyOptimizer
@@ -204,7 +204,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             if not result.success:
                 return OptimizationResult(
                     optimizer_name="MILP",
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                     success=False,
                     objective_value=None,
                     schedule=[],
@@ -222,7 +222,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
                 soc = soc0 + np.sum(-p_storage_opt[:t+1] * dt / cap * 100)
                 # 截断到物理边界，但应满足约束
                 schedule.append(SchedulePoint(
-                    timestamp=datetime.utcnow(),  # 实际需要时间，但可后续赋值
+                    timestamp=datetime.now(timezone.utc),  # 实际需要时间，但可后续赋值
                     storage_power_target_kw=float(p_storage_opt[t]),
                     predicted_soc=float(soc)
                 ))
@@ -233,7 +233,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
 
             return OptimizationResult(
                 optimizer_name="MILP",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 success=True,
                 objective_value=float(objective),
                 schedule=schedule,
@@ -243,7 +243,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
         except Exception as e:
             return OptimizationResult(
                 optimizer_name="MILP",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 success=False,
                 objective_value=None,
                 schedule=[],

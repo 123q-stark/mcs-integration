@@ -3,7 +3,7 @@
 所有算法类必须实现这些协议，以便 B 通过 AlgorithmBridgeService 调用。
 """
 from typing import Protocol, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 
 # 从公共 Schema 导入（已修正为 algorithm 子模块）

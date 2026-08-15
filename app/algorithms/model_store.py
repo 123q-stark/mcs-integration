@@ -5,7 +5,7 @@ import os
 import pickle
 import json
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ModelStore:
@@ -15,7 +15,7 @@ class ModelStore:
 
     def save_model(self, model: Any, model_name: str, meta: Dict[str, Any]) -> str:
         """保存模型和元数据，返回文件路径"""
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         filename = f"{model_name}_{timestamp}.pkl"
         meta_filename = f"{model_name}_{timestamp}_meta.json"
 
