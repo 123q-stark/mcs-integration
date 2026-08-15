@@ -27,19 +27,16 @@ const deviceConfigChanges = {};
 // ============ 加载所有配置 ============
 async function loadDefaultConfigs() {
     try {
-        // 加载电价
         const priceData = await fetchJson('/api/strategies/price-config');
         document.getElementById('price-valley').value = priceData.valley_price;
         document.getElementById('price-flat').value = priceData.flat_price;
         document.getElementById('price-peak').value = priceData.peak_price;
 
-        // 加载 Grid
         const gridData = await fetchJson('/api/strategies/grid-config');
         document.getElementById('grid-max-import').value = gridData.max_import_power_kw;
         document.getElementById('grid-allow-export').checked = gridData.allow_export;
         document.getElementById('grid-max-export').value = gridData.max_export_power_kw;
 
-        // 加载策略配置
         const configData = await fetchJson('/api/strategies/config');
         document.getElementById('batt-soc-min').value = configData.soc_min;
         document.getElementById('batt-soc-max').value = configData.soc_max;
@@ -50,7 +47,6 @@ async function loadDefaultConfigs() {
         document.getElementById('effective-mode-display').textContent = configData.requested_mode || 'AUTO';
         document.getElementById('header-mode').textContent = configData.requested_mode || 'AUTO';
 
-        // 加载设备配置
         await loadDeviceConfigs();
     } catch (error) {
         console.error('加载配置失败:', error);
@@ -63,7 +59,6 @@ async function loadDeviceConfigs() {
     try {
         const data = await fetchJson('/api/strategies/device-configs');
         
-        // 渲染 PV 表格
         const pvConfigs = data.filter(c => c.device_code.startsWith('PV'));
         const pvTbody = document.getElementById('pv-config-table');
         if (pvTbody) {
@@ -80,7 +75,6 @@ async function loadDeviceConfigs() {
             `).join('');
         }
 
-        // 渲染 Charger 表格
         const chargerConfigs = data.filter(c => c.device_code.startsWith('CHG'));
         const chargerTbody = document.getElementById('charger-config-table');
         if (chargerTbody) {
@@ -105,7 +99,6 @@ async function loadDeviceConfigs() {
     }
 }
 
-// ============ 暂存设备配置修改 ============
 function updateDeviceConfig(deviceCode, field, value) {
     if (!deviceConfigChanges[deviceCode]) {
         deviceConfigChanges[deviceCode] = {};
@@ -113,7 +106,6 @@ function updateDeviceConfig(deviceCode, field, value) {
     deviceConfigChanges[deviceCode][field] = value;
 }
 
-// ============ 保存单个设备配置 ============
 async function saveDeviceConfig(deviceCode) {
     const changes = deviceConfigChanges[deviceCode] || {};
     if (Object.keys(changes).length === 0) {
@@ -142,7 +134,6 @@ async function saveDeviceConfig(deviceCode) {
     }
 }
 
-// ============ 保存所有设备配置 ============
 async function saveAllDeviceConfigs() {
     const allChanges = Object.keys(deviceConfigChanges);
     if (allChanges.length === 0) {
@@ -159,7 +150,6 @@ async function saveAllDeviceConfigs() {
                 body: JSON.stringify(changes)
             });
         }
-        // 清空暂存
         for (const key of allChanges) {
             delete deviceConfigChanges[key];
         }
@@ -188,7 +178,6 @@ async function saveMode() {
     }
 }
 
-// ============ Battery 配置保存 ============
 function saveBatteryConfig() {
     const data = {
         soc_min: parseFloat(document.getElementById('batt-soc-min').value),
@@ -202,12 +191,10 @@ function saveBatteryConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config_name: 'default', ...data })
     })
-    .then(res => res.json())
     .then(() => showToast('Battery 配置已保存'))
     .catch(() => showToast('保存失败', 'error'));
 }
 
-// ============ Grid 配置保存 ============
 function saveGridConfig() {
     const data = {
         max_import_power_kw: parseFloat(document.getElementById('grid-max-import').value),
@@ -219,12 +206,10 @@ function saveGridConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(res => res.json())
     .then(() => showToast('Grid 配置已保存'))
     .catch(() => showToast('保存失败', 'error'));
 }
 
-// ============ Price 配置保存 ============
 function savePriceConfig() {
     const data = {
         valley_price: parseFloat(document.getElementById('price-valley').value),
@@ -236,12 +221,10 @@ function savePriceConfig() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(res => res.json())
     .then(() => showToast('电价配置已保存'))
     .catch(() => showToast('保存失败', 'error'));
 }
 
-// ============ 运行策略 ============
 async function runStrategy() {
     const btn = event.target;
     btn.disabled = true;
@@ -276,7 +259,6 @@ async function runStrategy() {
     }
 }
 
-// ============ 刷新结果 ============
 async function refreshResult() {
     try {
         const data = await fetchJson('/api/strategies/runtime');
@@ -298,7 +280,6 @@ async function refreshResult() {
     }
 }
 
-// ============ 预览决策 ============
 document.getElementById('preview-form')?.addEventListener('submit', function(e) {
     e.preventDefault();
     const data = {
@@ -328,7 +309,6 @@ document.getElementById('preview-form')?.addEventListener('submit', function(e) 
     });
 });
 
-// ============ v1.3 预测曲线 ============
 let loadChart = null;
 let pvChart = null;
 
@@ -384,7 +364,6 @@ function updateChart(canvasId, label, labels, values, chartInstance, color) {
     else if (canvasId === 'pvForecastChart') pvChart = newChart;
 }
 
-// ============ v1.4 调度计划 ============
 let schedulePowerChart = null;
 let scheduleSocChart = null;
 
@@ -443,7 +422,6 @@ function updateScheduleChart(canvasId, label, labels, values, chartInstance, col
     else if (canvasId === 'scheduleSocChart') scheduleSocChart = newChart;
 }
 
-// ============ 页面初始化 ============
 document.addEventListener('DOMContentLoaded', function() {
     loadDefaultConfigs();
     setTimeout(fetchForecast, 300);
