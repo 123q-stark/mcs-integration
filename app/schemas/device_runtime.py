@@ -18,6 +18,9 @@ class DeviceRuntimeState(BaseModel):
     # 功率
     power_kw: float
 
+    # A-P1-02: 额定功率（物理限幅用）
+    rated_power_kw: Optional[float] = None
+
     # 可选字段（不同类型设备有不同的字段）
     voltage_v: Optional[float] = None
     current_a: Optional[float] = None

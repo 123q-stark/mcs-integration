@@ -185,9 +185,16 @@ class DeviceRuntimeService:
             current_state = self.simulator.get_state_without_advance()
             current_soc = current_state.storage_soc or 50.0
 
-            # 2. 安全限幅（默认限制在 ±10kW，后续由 strategy_repo 读取）
+            # 2. A-P1-02: 使用 Simulator 中的 Battery 额定功率进行限幅
             target = decision.storage_power_target
-            target = max(-10.0, min(10.0, target))
+
+            # 从 Simulator 获取 Battery 额定功率（如果存在）
+            max_power = 10.0  # 默认值
+            if hasattr(self.simulator, '_battery_rated_power_kw'):
+                max_power = self.simulator._battery_rated_power_kw
+
+            # 功率限幅
+            target = max(-max_power, min(max_power, target))
 
             # SOC 边界限幅
             if target > 0 and current_soc <= 20.0:  # 放电时 SOC 过低则停止

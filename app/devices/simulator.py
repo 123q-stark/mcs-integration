@@ -31,6 +31,8 @@ class SimulatorAdapter(DeviceAdapter):
 
         # ===== Battery =====
         self._battery: DeviceRuntimeState = self._init_battery()
+        # A-P1-02: Battery 额定功率（物理限幅用）
+        self._battery_rated_power_kw = 10.0
 
         # ===== Grid =====
         self._grid: DeviceRuntimeState = self._init_grid()
@@ -61,6 +63,7 @@ class SimulatorAdapter(DeviceAdapter):
                     current_a=0.0,
                     temperature_c=25.0 + self._random.uniform(-3, 3),
                     energy_kwh=0.0,
+                    rated_power_kw=50.0,  # A-P1-02: 补齐额定功率
                 )
             )
 
@@ -82,6 +85,7 @@ class SimulatorAdapter(DeviceAdapter):
                     enabled=True,
                     status="idle",
                     connected=False,
+                    rated_power_kw=50.0,  # A-P1-02: 补齐额定功率
                 )
             )
 
@@ -101,6 +105,7 @@ class SimulatorAdapter(DeviceAdapter):
             soc=50.0,
             soh=98.0,
             alarm=False,
+            rated_power_kw=10.0,  # A-P1-02: 补齐额定功率
         )
 
     def _init_grid(self) -> DeviceRuntimeState:
@@ -115,6 +120,7 @@ class SimulatorAdapter(DeviceAdapter):
             voltage_v=220.0,
             current_a=0.0,
             energy_kwh=0.0,
+            rated_power_kw=300.0,  # A-P1-02: 补齐额定功率
         )
 
     def _update_pv_units(self, base_pv: float) -> None:
@@ -275,6 +281,9 @@ class SimulatorAdapter(DeviceAdapter):
             self._simulated_hour = 6.0
             self._timestamp = datetime.now()
 
+            # A-P1-02: 重置 Battery 额定功率
+            self._battery_rated_power_kw = 10.0
+
             for pv in self._pv_units:
                 pv.power_kw = 0.0
                 pv.current_a = 0.0
@@ -284,6 +293,7 @@ class SimulatorAdapter(DeviceAdapter):
                 pv.timestamp = self._timestamp
                 pv.is_online = True
                 pv.quality = "good"
+                pv.rated_power_kw = 50.0  # A-P1-02: 重置额定功率
 
             for charger in self._chargers:
                 charger.power_kw = 0.0
@@ -295,6 +305,7 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.timestamp = self._timestamp
                 charger.is_online = True
                 charger.quality = "good"
+                charger.rated_power_kw = 50.0  # A-P1-02: 重置额定功率
 
             self._battery.power_kw = 0.0
             self._battery.soc = 50.0
@@ -304,6 +315,7 @@ class SimulatorAdapter(DeviceAdapter):
             self._battery.is_online = True
             self._battery.quality = "good"
             self._battery.alarm = False
+            self._battery.rated_power_kw = 10.0  # A-P1-02: 重置额定功率
 
             self._grid.power_kw = 0.0
             self._grid.current_a = 0.0
@@ -311,6 +323,7 @@ class SimulatorAdapter(DeviceAdapter):
             self._grid.timestamp = self._timestamp
             self._grid.is_online = True
             self._grid.quality = "good"
+            self._grid.rated_power_kw = 300.0  # A-P1-02: 重置额定功率
 
             self._update_aggregate_state()
             return self._state.model_copy(deep=True)
@@ -363,9 +376,11 @@ class SimulatorAdapter(DeviceAdapter):
             # 1. 推进环境（PV/负荷变化）
             self._next_environment()
 
-            # 2. 应用储能控制
+            # 2. 应用储能控制（A-P1-02: 使用 Battery 额定功率限幅）
             if storage_power_target != 0.0:
-                target = max(-10.0, min(10.0, storage_power_target))
+                # A-P1-02: 使用 Battery 额定功率进行限幅（替代硬编码 ±10kW）
+                max_power = getattr(self, '_battery_rated_power_kw', 10.0)
+                target = max(-max_power, min(max_power, storage_power_target))
                 delta_soc = (
                     -target
                     * self._simulation_step_hours
@@ -439,7 +454,9 @@ class SimulatorAdapter(DeviceAdapter):
 
     def execute_command(self, decision: ControlDecision) -> SystemState:
         with self._lock:
-            target = max(-10.0, min(10.0, decision.storage_power_target))
+            # A-P1-02: 使用 Battery 额定功率限幅
+            max_power = getattr(self, '_battery_rated_power_kw', 10.0)
+            target = max(-max_power, min(max_power, decision.storage_power_target))
 
             delta_soc = (
                 -target
