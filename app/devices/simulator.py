@@ -485,11 +485,11 @@ class SimulatorAdapter(DeviceAdapter):
     # ==================== 以下为原接口保持不变 ====================
 
     def read_state(self) -> SystemState:
-        with self._lock:
-            self._next_environment()
-            # 保存设备遥测
-            self._save_device_history()
-            return self._state.model_copy(deep=True)
+        """
+        读取当前状态（纯只读，不推进时间）
+        为了向后兼容保留此方法，内部调用 get_state_without_advance()
+        """
+        return self.get_state_without_advance()
 
     def get_pv_units(self) -> List[DeviceRuntimeState]:
         with self._lock:

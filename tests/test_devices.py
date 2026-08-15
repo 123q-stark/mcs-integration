@@ -569,3 +569,35 @@ def test_devices_page_returns_200(tmp_path):
         response = client.get("/devices")
         assert response.status_code == 200
         assert "设备管理" in response.text
+
+# ==================== A-P0-01: Simulator 时间语义测试 ====================
+
+def test_read_state_does_not_advance_time():
+    """A-P0-01: 验证 read_state() 不推进时间"""
+    from app.devices.simulator import SimulatorAdapter
+
+    sim = SimulatorAdapter()
+    sim.reset(seed=2026)
+
+    t0 = sim.get_state_without_advance().simulated_hour
+
+    # 连续读取 100 次
+    for _ in range(100):
+        sim.read_state()
+
+    t1 = sim.get_state_without_advance().simulated_hour
+    assert t1 == t0, f"时间从 {t0} 变为 {t1}，不应变化"
+
+
+def test_get_state_without_advance_does_not_change_time():
+    """A-P0-01: 验证 get_state_without_advance() 不推进时间"""
+    from app.devices.simulator import SimulatorAdapter
+
+    sim = SimulatorAdapter()
+    sim.reset(seed=2026)
+
+    t0 = sim.get_state_without_advance().simulated_hour
+
+    for _ in range(50):
+        state = sim.get_state_without_advance()
+        assert state.simulated_hour == t0

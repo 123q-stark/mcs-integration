@@ -60,14 +60,13 @@ def get_device_status(
     service: DeviceService = Depends(get_device_service),
 ):
     """
-    获取设备实时状态
-    - **device_id**: 设备 ID
-    - 直接从 Simulator 读取最新状态（实时更新）
+    获取设备实时状态（A-P0-01: 纯只读，不推进时间）
     """
     try:
         ems_service = request.app.state.service
-        # 直接从 Simulator 读取最新状态，绕过缓存
-        state = ems_service.device.read_state()
+        # A-P0-01: 使用 get_state_without_advance() 代替 read_state()
+        # read_state() 会推进时间，违反只读语义
+        state = ems_service.device.get_state_without_advance()
         return service.get_device_status(device_id, state)
     except DeviceNotFoundError:
         raise HTTPException(
@@ -79,7 +78,6 @@ def get_device_status(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="系统尚未初始化，请稍后重试。",
         )
-
 
 # ==================== A-06: 设备历史数据接口（使用 DeviceTelemetry） ====================
 from app.models.device_telemetry import DeviceTelemetry

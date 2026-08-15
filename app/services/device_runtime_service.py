@@ -135,3 +135,21 @@ class DeviceRuntimeService:
             "total_records": len(all_records),
             "message": message,
         }
+    # ==================== A-P0-01: 正式只读接口 ====================
+
+    def get_system_state(self):
+        """
+        获取当前系统状态（纯只读，不推进时间）
+        作为 DeviceReadPort 的正式接口
+        """
+        return self.simulator.get_state_without_advance()
+
+    def get_device_status(self, device_code: str):
+        """
+        获取单个设备状态（纯只读）
+        """
+        all_devices = self.simulator.get_all_devices_state()
+        for dev in all_devices:
+            if dev.device_code == device_code:
+                return dev
+        return None
