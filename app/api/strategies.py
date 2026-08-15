@@ -277,6 +277,10 @@ async def get_load_forecast(request: Request):
         ).order_by(StrategyRunModel.created_at.desc()).first()
         if record and record.load_forecast_json:
             points = json.loads(record.load_forecast_json)
+            # ===== B-P1-04: 统一转换为 value_kw =====
+            # 如果数据库存储的是 "value"，映射为 "value_kw"
+            if points and "value" in points[0] and "value_kw" not in points[0]:
+                points = [{"timestamp": p["timestamp"], "value_kw": p["value"]} for p in points]
             return {
                 "model_name": "XGBoost",
                 "target": "load",
@@ -296,7 +300,8 @@ async def get_load_forecast(request: Request):
         hour = dt.hour
         base = 50 + 20 * math.sin((hour - 8) / 24 * 2 * math.pi)
         val = max(10, base + 5 * math.sin(i/96 * 2 * math.pi))
-        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+        # ===== B-P1-04: 统一使用 value_kw =====
+        points.append({"timestamp": dt.isoformat(), "value_kw": round(val, 2)})
     return {
         "model_name": "Simulated",
         "target": "load",
@@ -320,6 +325,9 @@ async def get_pv_forecast(request: Request):
         ).order_by(StrategyRunModel.created_at.desc()).first()
         if record and record.pv_forecast_json:
             points = json.loads(record.pv_forecast_json)
+            # ===== B-P1-04: 统一转换为 value_kw =====
+            if points and "value" in points[0] and "value_kw" not in points[0]:
+                points = [{"timestamp": p["timestamp"], "value_kw": p["value"]} for p in points]
             return {
                 "model_name": "XGBoost",
                 "target": "pv",
@@ -342,7 +350,8 @@ async def get_pv_forecast(request: Request):
             val = 80 * math.sin(math.pi * pos)
         else:
             val = 0
-        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+        # ===== B-P1-04: 统一使用 value_kw =====
+        points.append({"timestamp": dt.isoformat(), "value_kw": round(val, 2)})
     return {
         "model_name": "Simulated",
         "target": "pv",
