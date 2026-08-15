@@ -43,9 +43,8 @@ async function loadDeviceDetail() {
         renderDeviceDetail(device);
         loadDeviceStatus(deviceId);
         loadDeviceHistory(deviceId);
-        if (device.device_type === 'charger') {
-            loadStrategyParams(device.device_code);
-        }
+        // A-P1-03: 所有设备类型都加载策略参数
+        loadStrategyParams(device);
     } catch (error) {
         console.error('加载设备详情失败:', error);
         document.getElementById('realtimeGrid').innerHTML = `
@@ -77,12 +76,8 @@ function renderDeviceDetail(device) {
         controlSection.style.display = 'none';
     }
 
-    const strategyParams = document.getElementById('strategyParams');
-    if (device.device_type === 'charger') {
-        strategyParams.style.display = 'block';
-    } else {
-        strategyParams.style.display = 'none';
-    }
+    // A-P1-03: 所有设备类型都显示策略参数区域
+    document.getElementById('strategyParams').style.display = 'block';
 }
 
 async function loadDeviceStatus(deviceId) {
@@ -145,24 +140,74 @@ function renderDeviceStatus(status) {
     }
 }
 
-async function loadStrategyParams(deviceCode) {
+// ==================== A-P1-03: 根据设备类型加载对应的策略参数 ====================
+
+async function loadStrategyParams(device) {
+    const grid = document.getElementById('strategyParamGrid');
+    const deviceCode = device.device_code;
+    const deviceType = device.device_type;
+
     try {
-        const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const configs = await response.json();
-        const config = configs.find(c => c.device_code === deviceCode);
-        if (config) {
-            document.getElementById('spParticipate').textContent = config.participate_in_strategy ? '是' : '否';
-            document.getElementById('spAllowControl').textContent = config.allow_strategy_control ? '是' : '否';
-            document.getElementById('spPowerLimit').textContent = config.strategy_power_limit_kw ? `${config.strategy_power_limit_kw} kW` : '--';
-            document.getElementById('spPriority').textContent = config.priority || '--';
+        let params = [];
+
+        if (deviceType === 'pv') {
+            // PV: 获取设备策略配置（是否参与策略）
+            const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const configs = await response.json();
+            const config = configs.find(c => c.device_code === deviceCode);
+            params = [
+                { label: '参与策略', value: config ? (config.participate_in_strategy ? '✅ 是' : '❌ 否') : '--' }
+            ];
+        } else if (deviceType === 'charger') {
+            // Charger: 获取设备策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const configs = await response.json();
+            const config = configs.find(c => c.device_code === deviceCode);
+            params = [
+                { label: '参与策略', value: config ? (config.participate_in_strategy ? '✅ 是' : '❌ 否') : '--' },
+                { label: '允许策略控制', value: config ? (config.allow_strategy_control ? '✅ 是' : '❌ 否') : '--' },
+                { label: '策略功率上限', value: config?.strategy_power_limit_kw ? `${config.strategy_power_limit_kw} kW` : '--' },
+                { label: '优先级', value: config?.priority || '--' }
+            ];
+        } else if (deviceType === 'battery' || deviceType === 'storage') {
+            // Battery: 获取全局策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/config`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const config = await response.json();
+            params = [
+                { label: 'SOC 下限', value: config.soc_min !== undefined ? `${config.soc_min}%` : '--' },
+                { label: 'SOC 上限', value: config.soc_max !== undefined ? `${config.soc_max}%` : '--' },
+                { label: '充电功率上限', value: config.charge_power_kw !== undefined ? `${config.charge_power_kw} kW` : '--' },
+                { label: '放电功率上限', value: config.discharge_power_kw !== undefined ? `${config.discharge_power_kw} kW` : '--' }
+            ];
+        } else if (deviceType === 'grid') {
+            // Grid: 获取电网策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/grid-config`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const config = await response.json();
+            params = [
+                { label: '最大购电功率', value: config.max_import_power_kw !== undefined ? `${config.max_import_power_kw} kW` : '--' },
+                { label: '是否允许上网', value: config.allow_export !== undefined ? (config.allow_export ? '✅ 是' : '❌ 否') : '--' },
+                { label: '最大上网功率', value: config.max_export_power_kw !== undefined ? `${config.max_export_power_kw} kW` : '--' }
+            ];
+        } else {
+            // 未知类型
+            params = [{ label: '策略配置', value: '--' }];
         }
+
+        // 渲染
+        grid.innerHTML = params.map(p => `
+            <div class="param-item">
+                <span class="plabel">${p.label}</span>
+                <span class="pvalue">${p.value}</span>
+            </div>
+        `).join('');
+
     } catch (error) {
         console.warn('获取策略参数失败:', error);
-        document.getElementById('spParticipate').textContent = '--';
-        document.getElementById('spAllowControl').textContent = '--';
-        document.getElementById('spPowerLimit').textContent = '--';
-        document.getElementById('spPriority').textContent = '--';
+        grid.innerHTML = `<div class="param-item"><span class="plabel">加载失败</span><span class="pvalue">--</span></div>`;
     }
 }
 
