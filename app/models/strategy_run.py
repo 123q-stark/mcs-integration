@@ -21,6 +21,14 @@ class StrategyRunModel(Base):
     source = Column(String(20), nullable=False)  # 'milp' or 'fixed_rule'
     status = Column(String(20), nullable=False)  # 'success' or 'failed'
 
+    # ===== B-P0-07 新增：算法追溯字段 =====
+    forecast_model_load = Column(String(50), nullable=True)   # 负荷预测模型名称
+    forecast_model_pv = Column(String(50), nullable=True)     # PV预测模型名称
+    optimizer_name = Column(String(50), nullable=True)        # 优化器名称
+    algorithm_message = Column(Text, nullable=True)           # 算法消息
+    execution_message = Column(Text, nullable=True)           # 执行消息
+    # =====================================
+
     # JSON 字段存储预测和调度数据
     load_forecast_json = Column(Text, nullable=True)
     pv_forecast_json = Column(Text, nullable=True)
