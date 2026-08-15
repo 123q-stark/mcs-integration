@@ -38,37 +38,39 @@ class StrategyDeviceRepository:
 
     def init_default_configs(self):
         """
-        初始化默认设备策略配置
+        初始化默认设备策略配置（逐设备幂等）
         为 PV001~PV005 和 CHG001~CHG005 创建配置
-        幂等操作：如果已有 10 条记录则不重复插入
+        存在则跳过，不存在则补建
         """
-        existing = self.db.query(StrategyDeviceConfigModel).count()
-        if existing >= 10:
-            return
+        # 目标设备列表
+        pv_codes = [f"PV00{i}" for i in range(1, 6)]
+        charger_codes = [f"CHG00{i}" for i in range(1, 6)]
+        all_codes = pv_codes + charger_codes
 
-        default_configs = []
+        for device_code in all_codes:
+            existing = self.get_by_device_code(device_code)
+            if existing is not None:
+                continue  # 已存在，跳过
 
-        # PV 设备：参与策略，但不允许策略控制
-        for i in range(1, 6):
-            code = f"PV00{i}"
-            default_configs.append(StrategyDeviceConfigModel(
-                device_code=code,
-                participate_in_strategy=True,
-                allow_strategy_control=False,
-                strategy_power_limit_kw=None,
-                priority=1
-            ))
+            # 不存在，创建
+            if device_code.startswith("PV"):
+                config = StrategyDeviceConfigModel(
+                    device_code=device_code,
+                    participate_in_strategy=True,
+                    allow_strategy_control=False,
+                    strategy_power_limit_kw=None,
+                    priority=1,
+                )
+            else:  # CHG
+                # 提取数字后缀作为优先级 (CHG001 -> 1)
+                priority = int(device_code[-3:])
+                config = StrategyDeviceConfigModel(
+                    device_code=device_code,
+                    participate_in_strategy=True,
+                    allow_strategy_control=True,
+                    strategy_power_limit_kw=50.0,
+                    priority=priority,
+                )
+            self.db.add(config)
 
-        # Charger 设备：参与策略，允许策略控制
-        for i in range(1, 6):
-            code = f"CHG00{i}"
-            default_configs.append(StrategyDeviceConfigModel(
-                device_code=code,
-                participate_in_strategy=True,
-                allow_strategy_control=True,
-                strategy_power_limit_kw=50.0,
-                priority=i
-            ))
-
-        self.db.add_all(default_configs)
         self.db.commit()
