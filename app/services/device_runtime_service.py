@@ -61,8 +61,6 @@ class DeviceRuntimeService:
         records_per_step = 12  # 12 个逻辑设备
         all_records: List[DeviceTelemetry] = []
 
-        print(f"[DeviceRuntimeService] 开始生成 {days} 天历史数据（共 {total_steps} 个时刻）...")
-
         # 3. 生成历史
         for step_idx in range(total_steps):
             # 获取当前状态（不推进时间）
@@ -112,13 +110,7 @@ class DeviceRuntimeService:
                     )
                 )
 
-            # 每 96 步（一天）打印进度
-            if (step_idx + 1) % 96 == 0:
-                print(f"[DeviceRuntimeService] 已生成 {step_idx + 1} / {total_steps} 步 "
-                      f"({(step_idx + 1) // 96} 天)")
-
         # 4. 批量写入数据库（一次性提交，提升性能）
-        print(f"[DeviceRuntimeService] 正在写入 {len(all_records)} 条遥测记录...")
         self.telemetry_repo.add_many(all_records)
 
         elapsed = time.time() - start_time
@@ -127,7 +119,6 @@ class DeviceRuntimeService:
             f"成功生成 {days} 天历史（{total_steps} 个时刻，"
             f"{len(all_records)} 条遥测记录），耗时 {elapsed:.2f} 秒"
         )
-        print(f"[DeviceRuntimeService] ✅ {message}")
 
         return {
             "success": True,

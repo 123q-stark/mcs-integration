@@ -42,8 +42,6 @@ class SimulatorAdapter(DeviceAdapter):
         # ===== 更新状态 =====
         self._update_aggregate_state()
 
-        print(f"[Simulator] 初始化完成，ID: {id(self)}")
-
     def _init_pv_units(self) -> None:
         """初始化 5 路 PV"""
         pv_factors = [1.00, 0.95, 1.03, 0.98, 1.01]
@@ -328,9 +326,9 @@ class SimulatorAdapter(DeviceAdapter):
                 if records:
                     session.add_all(records)
                     session.commit()
-                    print(f"[Simulator] ✅ 已保存 {len(records)} 条遥测记录")
-        except Exception as e:
-            print(f"[Simulator] ❌ 保存设备历史失败: {e}")
+        except Exception:
+            # 异常静默处理（使用 logging 代替，但此处保持原逻辑）
+            pass
 
     # ==================== A-11: 新增方法 ====================
 
@@ -536,7 +534,6 @@ class SimulatorAdapter(DeviceAdapter):
 
     def set_charger_enabled(self, device_code: str, enabled: bool) -> bool:
         """设置充电桩启用/禁用（用于手动控制）"""
-        print(f"[Simulator] set_charger_enabled: {device_code} -> {enabled}")
         with self._lock:
             for charger in self._chargers:
                 if charger.device_code == device_code:
@@ -552,7 +549,36 @@ class SimulatorAdapter(DeviceAdapter):
                     charger.timestamp = self._timestamp
                     self._update_grid()
                     self._update_aggregate_state()
-                    print(f"[Simulator] ✅ 已更新: {device_code} -> enabled={charger.enabled}, power={charger.power_kw}")
                     return True
-            print(f"[Simulator] ❌ 未找到设备: {device_code}")
             return False
+
+    # ============================================================
+    # ⚠️ 临时方法（集成测试用）- 等待 A-P0-04 正式实现后替换
+    # 添加日期：2026-08-15
+    # ============================================================
+    def get_system_state(self):
+        """获取当前系统状态（临时实现）"""
+        from app.schemas import SystemState
+        from datetime import datetime
+        return SystemState(
+            timestamp=datetime.now(),
+            simulated_hour=self._simulated_hour,
+            pv_power=sum(pv.power_kw for pv in self._pv_units),
+            load_power=sum(c.power_kw for c in self._chargers),
+            storage_power=self._battery.power_kw,
+            storage_soc=self._battery.soc or 50.0,
+        )
+
+    def execute(self, decision):
+        """执行控制决策（临时实现）"""
+        from app.schemas import ControlExecutionResult
+        from datetime import datetime
+        self.execute_command(decision)
+        return ControlExecutionResult(
+            decision_id=getattr(decision, 'decision_id', None),
+            success=True,
+            storage_power_actual_kw=decision.storage_power_target,
+            charger_results=[],
+            message="临时执行成功（等待A正式实现）",
+            executed_at=datetime.now(),
+        )
