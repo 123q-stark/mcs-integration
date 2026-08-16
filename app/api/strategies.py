@@ -236,9 +236,9 @@ async def run_strategy(request: Request):
                 "fallback_used": result.get("fallback_used"),
                 "decision": decision_dict,
                 "execution": {
-                    "success": result["execution"].success,
-                    "storage_power_actual_kw": result["execution"].storage_power_actual_kw,
-                    "message": result["execution"].message,
+                    "success": result["execution"]["success"],
+                    "storage_power_actual_kw": result["execution"]["storage_power_actual_kw"],
+                    "message": result["execution"]["message"],
                 },
                 "run_id": result.get("run_id"),
             }
