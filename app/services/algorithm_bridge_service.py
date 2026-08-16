@@ -232,7 +232,7 @@ class AlgorithmBridgeService:
             return None
 
     # =========================================================
-    # v1.3 完善：储能调度优化（保持不变）
+    # v1.3 完善：储能调度优化（使用 session 修复）
     # =========================================================
     def get_optimization(self, load_forecast: ForecastResult, pv_forecast: ForecastResult,
                          price_series: List[float], current_soc: float,
@@ -241,36 +241,38 @@ class AlgorithmBridgeService:
             from app.repositories.strategy_repository import StrategyRepository
             from app.repositories.grid_strategy_repository import GridStrategyRepository
 
-            strategy_repo = StrategyRepository(self.db)
-            grid_repo = GridStrategyRepository(self.db)
+            # ===== 修复：使用 session 获取 Repository =====
+            with self.db.session() as session:
+                strategy_repo = StrategyRepository(session)
+                grid_repo = GridStrategyRepository(session)
 
-            strategy_config = strategy_repo.get_active_config()
-            grid_config = grid_repo.get_config()
+                strategy_config = strategy_repo.get_active_config()
+                grid_config = grid_repo.get_config()
 
-            if strategy_config is None:
-                soc_min, soc_max = 20.0, 90.0
-                charge_power_max, discharge_power_max = 10.0, 10.0
-            else:
-                soc_min = strategy_config.soc_min
-                soc_max = strategy_config.soc_max
-                charge_power_max = strategy_config.charge_power_kw
-                discharge_power_max = strategy_config.discharge_power_kw
+                if strategy_config is None:
+                    soc_min, soc_max = 20.0, 90.0
+                    charge_power_max, discharge_power_max = 10.0, 10.0
+                else:
+                    soc_min = strategy_config.soc_min
+                    soc_max = strategy_config.soc_max
+                    charge_power_max = strategy_config.charge_power_kw
+                    discharge_power_max = strategy_config.discharge_power_kw
 
-            request = {
-                'load_forecast': [p.value_kw for p in load_forecast.points],
-                'pv_forecast': [p.value_kw for p in pv_forecast.points],
-                'price_series': price_series,
-                'current_soc': current_soc,
-                'battery_capacity_kwh': battery_capacity_kwh,
-                'soc_min': soc_min,
-                'soc_max': soc_max,
-                'charge_power_max': charge_power_max,
-                'discharge_power_max': discharge_power_max,
-                'max_import_power': grid_config.max_import_power_kw,
-                'allow_export': grid_config.allow_export,
-                'max_export_power': grid_config.max_export_power_kw,
-            }
-            return self.optimizer.optimize(request)
+                request = {
+                    'load_forecast': [p.value_kw for p in load_forecast.points],
+                    'pv_forecast': [p.value_kw for p in pv_forecast.points],
+                    'price_series': price_series,
+                    'current_soc': current_soc,
+                    'battery_capacity_kwh': battery_capacity_kwh,
+                    'soc_min': soc_min,
+                    'soc_max': soc_max,
+                    'charge_power_max': charge_power_max,
+                    'discharge_power_max': discharge_power_max,
+                    'max_import_power': grid_config.max_import_power_kw,
+                    'allow_export': grid_config.allow_export,
+                    'max_export_power': grid_config.max_export_power_kw,
+                }
+                return self.optimizer.optimize(request)
         except Exception as e:
             logger.error(f"优化失败: {e}")
             return OptimizationResult(

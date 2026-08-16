@@ -319,6 +319,12 @@ class StrategyRuntimeService:
                     ])
 
                 # ===== B-P0-07 新增：算法追溯字段 =====
+                # ===== 修复：execution 可能是字典 =====
+                if isinstance(execution, dict):
+                    exec_success = execution.get("success", False)
+                else:
+                    exec_success = execution.success
+
                 record = StrategyRunModel(
                     created_at=datetime.now(),
                     requested_mode=requested_mode,
@@ -328,13 +334,13 @@ class StrategyRuntimeService:
                     action=decision.action,
                     message=decision.message,
                     source=decision.source,
-                    status="success" if execution.success else "failed",
+                    status="success" if exec_success else "failed",
                     # 新增追溯字段
                     forecast_model_load=load_forecast.model_name if load_forecast else None,
                     forecast_model_pv=pv_forecast.model_name if pv_forecast else None,
                     optimizer_name=optimization.optimizer_name if optimization else None,
                     algorithm_message=decision.message if decision else None,
-                    execution_message=execution.message if execution else None,
+                    execution_message=execution.get("message") if isinstance(execution, dict) else execution.message,
                     # JSON 字段
                     load_forecast_json=load_json,
                     pv_forecast_json=pv_json,
