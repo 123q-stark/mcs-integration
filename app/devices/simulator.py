@@ -31,12 +31,15 @@ class SimulatorAdapter(DeviceAdapter):
 
         # ===== Battery =====
         self._battery: DeviceRuntimeState = self._init_battery()
+        # A-P1-02: Battery 额定功率（物理限幅用）
+        self._battery_rated_power_kw = 10.0
 
         # ===== Grid =====
         self._grid: DeviceRuntimeState = self._init_grid()
 
         # ===== 当前模拟时间 =====
         self._simulated_hour = 6.0
+        self._simulated_day = 4
         self._timestamp = datetime.now()
 
         # ===== 更新状态 =====
@@ -61,6 +64,7 @@ class SimulatorAdapter(DeviceAdapter):
                     current_a=0.0,
                     temperature_c=25.0 + self._random.uniform(-3, 3),
                     energy_kwh=0.0,
+                    rated_power_kw=50.0,  # A-P1-02: 补齐额定功率
                 )
             )
 
@@ -82,6 +86,7 @@ class SimulatorAdapter(DeviceAdapter):
                     enabled=True,
                     status="idle",
                     connected=False,
+                    rated_power_kw=50.0,  # A-P1-02: 补齐额定功率
                 )
             )
 
@@ -101,6 +106,7 @@ class SimulatorAdapter(DeviceAdapter):
             soc=50.0,
             soh=98.0,
             alarm=False,
+            rated_power_kw=10.0,  # A-P1-02: 补齐额定功率
         )
 
     def _init_grid(self) -> DeviceRuntimeState:
@@ -115,6 +121,7 @@ class SimulatorAdapter(DeviceAdapter):
             voltage_v=220.0,
             current_a=0.0,
             energy_kwh=0.0,
+            rated_power_kw=300.0,  # A-P1-02: 补齐额定功率
         )
 
     def _update_pv_units(self, base_pv: float) -> None:
@@ -131,6 +138,12 @@ class SimulatorAdapter(DeviceAdapter):
             # 电流 = 功率 / 电压（简化）
             if pv.voltage_v and pv.voltage_v > 0:
                 pv.current_a = round(pv.power_kw / pv.voltage_v * 1000, 2)
+
+            # A-P1-01: 累加累计发电量
+            # E_{k+1} = E_k + |P_k| * Δt
+            energy_delta = abs(pv.power_kw) * self._simulation_step_hours
+            pv.energy_kwh = round((pv.energy_kwh or 0.0) + energy_delta, 2)
+
             pv.timestamp = self._timestamp
             pv.is_online = True
 
@@ -145,6 +158,8 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.status = "disabled"
                 charger.current_a = 0.0
                 charger.connected = False
+                charger.is_online = False  # A-P1-06: 停止时离线
+                charger.quality = "disabled"  # A-P1-06: 质量标记为禁用
                 charger.timestamp = self._timestamp
                 continue
 
@@ -163,8 +178,14 @@ class SimulatorAdapter(DeviceAdapter):
 
             if charger.voltage_v and charger.voltage_v > 0:
                 charger.current_a = round(charger.power_kw / charger.voltage_v * 1000, 2)
+
+            # A-P1-01: 累加累计用电量
+            energy_delta = abs(charger.power_kw) * self._simulation_step_hours
+            charger.energy_kwh = round((charger.energy_kwh or 0.0) + energy_delta, 2)
+
             charger.timestamp = self._timestamp
-            charger.is_online = True
+            charger.is_online = True  # 运行时在线
+            charger.quality = "good"  # A-P1-06: 运行时质量良好
 
     def _update_battery(self, power_kw: float) -> None:
         """更新 Battery 状态"""
@@ -180,6 +201,11 @@ class SimulatorAdapter(DeviceAdapter):
 
         grid_power = load_total - pv_total - battery_power
         self._grid.power_kw = round(grid_power, 2)
+
+        # A-P1-01: 累加累计电网交换电量（绝对值）
+        energy_delta = abs(self._grid.power_kw) * self._simulation_step_hours
+        self._grid.energy_kwh = round((self._grid.energy_kwh or 0.0) + energy_delta, 2)
+
         self._grid.timestamp = self._timestamp
         self._grid.is_online = True
 
@@ -210,7 +236,12 @@ class SimulatorAdapter(DeviceAdapter):
 
     def _next_environment(self) -> None:
         """推进一个时间步（15min）"""
+        # A-P1-08: 推进仿真日期（每96步一天）
         self._simulated_hour = (self._simulated_hour + self._simulation_step_hours) % 24.0
+        if self._simulated_hour < 0.25:  # 跨天
+            self._simulated_day = (self._simulated_day + 1) % 7
+        is_weekend = self._simulated_day >= 5  # 周六(5)或周日(6)
+        weekday_factor = 0.7 if is_weekend else 1.0  # 周末负荷降低30%
         self._timestamp = datetime.now()
 
         hour = self._simulated_hour
@@ -224,115 +255,24 @@ class SimulatorAdapter(DeviceAdapter):
         base_pv = base_pv * cloud_factor
         base_pv = max(0.0, round(base_pv, 2))
 
+        # A-P1-08: 周末负荷降低30%
         base_load = (
-            58.0
-            + 12.0 * math.sin((hour - 8.0) / 24.0 * 2.0 * math.pi)
-            + self._random.uniform(-4.0, 4.0)
+                (58.0 + 12.0 * math.sin((hour - 8.0) / 24.0 * 2.0 * math.pi))
+                * weekday_factor
+                + self._random.uniform(-4.0, 4.0)
         )
-        base_load = max(30.0, round(base_load, 2))
+        base_load = max(30.0 * weekday_factor, round(base_load, 2))
 
         self._update_pv_units(base_pv)
         self._update_chargers(base_load)
         self._update_grid()
         self._update_aggregate_state()
 
-    # ==================== A-04: 保存设备遥测（完整字段） ====================
-    def _save_device_history(self) -> None:
-        """
-        保存所有设备的历史记录到 device_telemetry 表（完整字段）
-        修改于 A-11：补充 voltage_v、current_a、temperature_c、energy_kwh、status、enabled 等字段
-        """
-        try:
-            from app.database import Database
-            from app.config import Settings
-            from app.models import Device, DeviceTelemetry
-
-            settings = Settings.from_env()
-            db = Database(settings.database_url)
-
-            with db.session() as session:
-                devices = session.query(Device).all()
-                if not devices:
-                    return
-
-                records = []
-                for device in devices:
-                    # 根据设备类型从当前状态提取数据
-                    if device.device_type == "pv":
-                        unit = next((u for u in self._pv_units if u.device_code == device.device_code), None)
-                        if not unit:
-                            continue
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=unit.power_kw,
-                            voltage_v=unit.voltage_v,
-                            current_a=unit.current_a,
-                            temperature_c=unit.temperature_c,
-                            energy_kwh=unit.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=None,
-                            status=None,
-                            quality=unit.quality or "good",
-                        ))
-                    elif device.device_type == "charger":
-                        unit = next((c for c in self._chargers if c.device_code == device.device_code), None)
-                        if not unit:
-                            continue
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=unit.power_kw,
-                            voltage_v=unit.voltage_v,
-                            current_a=unit.current_a,
-                            temperature_c=None,
-                            energy_kwh=unit.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=unit.enabled,
-                            status=unit.status,
-                            quality=unit.quality or "good",
-                        ))
-                    elif device.device_type in ("storage", "battery"):
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=self._battery.power_kw,
-                            voltage_v=self._battery.voltage_v,
-                            current_a=self._battery.current_a,
-                            temperature_c=self._battery.temperature_c,
-                            energy_kwh=self._battery.energy_kwh,
-                            soc=self._battery.soc,
-                            soh=self._battery.soh,
-                            enabled=None,
-                            status=None,
-                            quality=self._battery.quality or "good",
-                        ))
-                    elif device.device_type == "grid":
-                        records.append(DeviceTelemetry(
-                            device_code=device.device_code,
-                            device_type=device.device_type,
-                            power_kw=self._grid.power_kw,
-                            voltage_v=self._grid.voltage_v,
-                            current_a=self._grid.current_a,
-                            temperature_c=None,
-                            energy_kwh=self._grid.energy_kwh,
-                            soc=None,
-                            soh=None,
-                            enabled=None,
-                            status=None,
-                            quality=self._grid.quality or "good",
-                        ))
-
-                if records:
-                    session.add_all(records)
-                    session.commit()
-                    print(f"[Simulator] ✅ 已保存 {len(records)} 条遥测记录")
-        except Exception as e:
-            print(f"[Simulator] ❌ 保存设备历史失败: {e}")
-
-    # ==================== A-11: 新增方法 ====================
+    # ==================== A-P0-02: 历史保存已迁移至 DeviceRuntimeService ====================
+    # _save_device_history() 已删除。
+    # 历史保存职责已统一由 DeviceRuntimeService 承担：
+    # - generate_history() 使用 telemetry_repo.add_many()
+    # - execute() 使用 telemetry_repo.add_many()
 
     def reset(self, seed: Optional[int] = None) -> SystemState:
         """
@@ -348,7 +288,11 @@ class SimulatorAdapter(DeviceAdapter):
                 self._random.seed(2026)
 
             self._simulated_hour = 6.0
+            self._simulated_day = 4
             self._timestamp = datetime.now()
+
+            # A-P1-02: 重置 Battery 额定功率
+            self._battery_rated_power_kw = 10.0
 
             for pv in self._pv_units:
                 pv.power_kw = 0.0
@@ -359,6 +303,7 @@ class SimulatorAdapter(DeviceAdapter):
                 pv.timestamp = self._timestamp
                 pv.is_online = True
                 pv.quality = "good"
+                pv.rated_power_kw = 50.0  # A-P1-02: 重置额定功率
 
             for charger in self._chargers:
                 charger.power_kw = 0.0
@@ -370,6 +315,7 @@ class SimulatorAdapter(DeviceAdapter):
                 charger.timestamp = self._timestamp
                 charger.is_online = True
                 charger.quality = "good"
+                charger.rated_power_kw = 50.0  # A-P1-02: 重置额定功率
 
             self._battery.power_kw = 0.0
             self._battery.soc = 50.0
@@ -379,6 +325,7 @@ class SimulatorAdapter(DeviceAdapter):
             self._battery.is_online = True
             self._battery.quality = "good"
             self._battery.alarm = False
+            self._battery.rated_power_kw = 10.0  # A-P1-02: 重置额定功率
 
             self._grid.power_kw = 0.0
             self._grid.current_a = 0.0
@@ -386,6 +333,7 @@ class SimulatorAdapter(DeviceAdapter):
             self._grid.timestamp = self._timestamp
             self._grid.is_online = True
             self._grid.quality = "good"
+            self._grid.rated_power_kw = 300.0  # A-P1-02: 重置额定功率
 
             self._update_aggregate_state()
             return self._state.model_copy(deep=True)
@@ -411,6 +359,11 @@ class SimulatorAdapter(DeviceAdapter):
             result.append(self._grid.model_copy(deep=True))
             return result
 
+    def get_current_timestamp(self) -> datetime:
+        """获取当前仿真时间戳（A-P0-03）"""
+        with self._lock:
+            return self._timestamp
+
     def step_with_control(
         self,
         storage_power_target: float = 0.0,
@@ -433,9 +386,11 @@ class SimulatorAdapter(DeviceAdapter):
             # 1. 推进环境（PV/负荷变化）
             self._next_environment()
 
-            # 2. 应用储能控制
+            # 2. 应用储能控制（A-P1-02: 使用 Battery 额定功率限幅）
             if storage_power_target != 0.0:
-                target = max(-10.0, min(10.0, storage_power_target))
+                # A-P1-02: 使用 Battery 额定功率进行限幅（替代硬编码 ±10kW）
+                max_power = getattr(self, '_battery_rated_power_kw', 10.0)
+                target = max(-max_power, min(max_power, storage_power_target))
                 delta_soc = (
                     -target
                     * self._simulation_step_hours
@@ -485,11 +440,11 @@ class SimulatorAdapter(DeviceAdapter):
     # ==================== 以下为原接口保持不变 ====================
 
     def read_state(self) -> SystemState:
-        with self._lock:
-            self._next_environment()
-            # 保存设备遥测
-            self._save_device_history()
-            return self._state.model_copy(deep=True)
+        """
+        读取当前状态（纯只读，不推进时间）
+        为了向后兼容保留此方法，内部调用 get_state_without_advance()
+        """
+        return self.get_state_without_advance()
 
     def get_pv_units(self) -> List[DeviceRuntimeState]:
         with self._lock:
@@ -509,7 +464,9 @@ class SimulatorAdapter(DeviceAdapter):
 
     def execute_command(self, decision: ControlDecision) -> SystemState:
         with self._lock:
-            target = max(-10.0, min(10.0, decision.storage_power_target))
+            # A-P1-02: 使用 Battery 额定功率限幅
+            max_power = getattr(self, '_battery_rated_power_kw', 10.0)
+            target = max(-max_power, min(max_power, decision.storage_power_target))
 
             delta_soc = (
                 -target

@@ -7,6 +7,7 @@ const pathParts = window.location.pathname.split('/');
 const deviceId = pathParts[pathParts.length - 1];
 
 let chartInstance = null;
+let currentDeviceType = null;  // A-P1-04: 存储当前设备类型
 
 function formatDate(dateStr) {
     const date = new Date(dateStr);
@@ -40,12 +41,13 @@ async function loadDeviceDetail() {
             throw new Error(`HTTP ${response.status}`);
         }
         const device = await response.json();
+        // A-P1-04: 保存设备类型供历史图表使用
+        currentDeviceType = device.device_type;
         renderDeviceDetail(device);
         loadDeviceStatus(deviceId);
         loadDeviceHistory(deviceId);
-        if (device.device_type === 'charger') {
-            loadStrategyParams(device.device_code);
-        }
+        // A-P1-03: 所有设备类型都加载策略参数
+        loadStrategyParams(device);
     } catch (error) {
         console.error('加载设备详情失败:', error);
         document.getElementById('realtimeGrid').innerHTML = `
@@ -77,12 +79,8 @@ function renderDeviceDetail(device) {
         controlSection.style.display = 'none';
     }
 
-    const strategyParams = document.getElementById('strategyParams');
-    if (device.device_type === 'charger') {
-        strategyParams.style.display = 'block';
-    } else {
-        strategyParams.style.display = 'none';
-    }
+    // A-P1-03: 所有设备类型都显示策略参数区域
+    document.getElementById('strategyParams').style.display = 'block';
 }
 
 async function loadDeviceStatus(deviceId) {
@@ -145,24 +143,74 @@ function renderDeviceStatus(status) {
     }
 }
 
-async function loadStrategyParams(deviceCode) {
+// ==================== A-P1-03: 根据设备类型加载对应的策略参数 ====================
+
+async function loadStrategyParams(device) {
+    const grid = document.getElementById('strategyParamGrid');
+    const deviceCode = device.device_code;
+    const deviceType = device.device_type;
+
     try {
-        const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const configs = await response.json();
-        const config = configs.find(c => c.device_code === deviceCode);
-        if (config) {
-            document.getElementById('spParticipate').textContent = config.participate_in_strategy ? '是' : '否';
-            document.getElementById('spAllowControl').textContent = config.allow_strategy_control ? '是' : '否';
-            document.getElementById('spPowerLimit').textContent = config.strategy_power_limit_kw ? `${config.strategy_power_limit_kw} kW` : '--';
-            document.getElementById('spPriority').textContent = config.priority || '--';
+        let params = [];
+
+        if (deviceType === 'pv') {
+            // PV: 获取设备策略配置（是否参与策略）
+            const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const configs = await response.json();
+            const config = configs.find(c => c.device_code === deviceCode);
+            params = [
+                { label: '参与策略', value: config ? (config.participate_in_strategy ? '✅ 是' : '❌ 否') : '--' }
+            ];
+        } else if (deviceType === 'charger') {
+            // Charger: 获取设备策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/device-configs`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const configs = await response.json();
+            const config = configs.find(c => c.device_code === deviceCode);
+            params = [
+                { label: '参与策略', value: config ? (config.participate_in_strategy ? '✅ 是' : '❌ 否') : '--' },
+                { label: '允许策略控制', value: config ? (config.allow_strategy_control ? '✅ 是' : '❌ 否') : '--' },
+                { label: '策略功率上限', value: config?.strategy_power_limit_kw ? `${config.strategy_power_limit_kw} kW` : '--' },
+                { label: '优先级', value: config?.priority || '--' }
+            ];
+        } else if (deviceType === 'battery' || deviceType === 'storage') {
+            // Battery: 获取全局策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/config`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const config = await response.json();
+            params = [
+                { label: 'SOC 下限', value: config.soc_min !== undefined ? `${config.soc_min}%` : '--' },
+                { label: 'SOC 上限', value: config.soc_max !== undefined ? `${config.soc_max}%` : '--' },
+                { label: '充电功率上限', value: config.charge_power_kw !== undefined ? `${config.charge_power_kw} kW` : '--' },
+                { label: '放电功率上限', value: config.discharge_power_kw !== undefined ? `${config.discharge_power_kw} kW` : '--' }
+            ];
+        } else if (deviceType === 'grid') {
+            // Grid: 获取电网策略配置
+            const response = await fetch(`${STRATEGY_API_BASE}/grid-config`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const config = await response.json();
+            params = [
+                { label: '最大购电功率', value: config.max_import_power_kw !== undefined ? `${config.max_import_power_kw} kW` : '--' },
+                { label: '是否允许上网', value: config.allow_export !== undefined ? (config.allow_export ? '✅ 是' : '❌ 否') : '--' },
+                { label: '最大上网功率', value: config.max_export_power_kw !== undefined ? `${config.max_export_power_kw} kW` : '--' }
+            ];
+        } else {
+            // 未知类型
+            params = [{ label: '策略配置', value: '--' }];
         }
+
+        // 渲染
+        grid.innerHTML = params.map(p => `
+            <div class="param-item">
+                <span class="plabel">${p.label}</span>
+                <span class="pvalue">${p.value}</span>
+            </div>
+        `).join('');
+
     } catch (error) {
         console.warn('获取策略参数失败:', error);
-        document.getElementById('spParticipate').textContent = '--';
-        document.getElementById('spAllowControl').textContent = '--';
-        document.getElementById('spPowerLimit').textContent = '--';
-        document.getElementById('spPriority').textContent = '--';
+        grid.innerHTML = `<div class="param-item"><span class="plabel">加载失败</span><span class="pvalue">--</span></div>`;
     }
 }
 
@@ -198,7 +246,8 @@ async function loadDeviceHistory(deviceId) {
         const response = await fetch(`${API_BASE}/${deviceId}/history?hours=24`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        renderHistory(data);
+        // A-P1-04: 传入设备类型用于判断是否显示 SOC
+        renderHistory(data, currentDeviceType);
     } catch (error) {
         console.error('获取历史数据失败:', error);
         document.getElementById('historyNoData').style.display = 'block';
@@ -206,7 +255,9 @@ async function loadDeviceHistory(deviceId) {
     }
 }
 
-function renderHistory(data) {
+// ==================== A-P1-04: Battery 同时画 SOC 与功率 ====================
+
+function renderHistory(data, deviceType) {
     const canvas = document.getElementById('historyChart');
     const noData = document.getElementById('historyNoData');
 
@@ -231,42 +282,125 @@ function renderHistory(data) {
     }
 
     const ctx = canvas.getContext('2d');
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '功率 (kW)',
-                data: powers,
-                borderColor: '#4f8cf7',
-                backgroundColor: 'rgba(79, 140, 247, 0.08)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 1.5,
-                borderWidth: 2,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: true, labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+    const isBattery = (deviceType === 'battery' || deviceType === 'storage');
+
+    if (isBattery) {
+        // A-P1-04: Battery 设备同时显示功率和 SOC（双 Y 轴）
+        const socs = data.data.map(d => d.storage_soc);
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '功率 (kW)',
+                        data: powers,
+                        borderColor: '#4f8cf7',
+                        backgroundColor: 'rgba(79, 140, 247, 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 1.5,
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'SOC (%)',
+                        data: socs,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 1.5,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 120,
-                    grid: { color: 'rgba(0,0,0,0.04)' },
-                    ticks: { font: { size: 10 } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+                    }
                 },
-                x: {
-                    grid: { display: false },
-                    ticks: { font: { size: 9 }, maxTicksLimit: 12 }
-                }
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 } },
+                        title: {
+                            display: true,
+                            text: '功率 (kW)',
+                            font: { size: 10 }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { drawOnChartArea: false },
+                        ticks: { font: { size: 10 } },
+                        title: {
+                            display: true,
+                            text: 'SOC (%)',
+                            font: { size: 10 }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    } else {
+        // 非 Battery 设备：只显示功率
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '功率 (kW)',
+                    data: powers,
+                    borderColor: '#4f8cf7',
+                    backgroundColor: 'rgba(79, 140, 247, 0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 1.5,
+                    borderWidth: 2,
+                }]
             },
-            interaction: { intersect: false, mode: 'index' }
-        }
-    });
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 120,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {

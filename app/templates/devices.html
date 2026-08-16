@@ -151,7 +151,6 @@
         border-color: #dce3ec;
     }
 
-    /* 卡片顶部：图标 + 状态 */
     .device-card .card-top {
         display: flex;
         justify-content: space-between;
@@ -175,7 +174,6 @@
         color: #c62828;
     }
 
-    /* 设备名称 + 编码 */
     .device-card .device-title {
         margin-bottom: 2px;
     }
@@ -191,7 +189,6 @@
         margin-left: 8px;
     }
 
-    /* 设备类型标签 */
     .device-card .type-tag {
         display: inline-block;
         font-size: 12px;
@@ -204,7 +201,6 @@
         align-self: flex-start;
     }
 
-    /* 详情行 */
     .device-card .detail-row {
         display: flex;
         justify-content: space-between;
@@ -223,7 +219,6 @@
         font-weight: 500;
     }
 
-    /* 更新时间 */
     .device-card .update-time {
         font-size: 12px;
         color: #b0bec5;
@@ -232,15 +227,15 @@
         border-top: 1px solid #f0f2f5;
     }
 
-    /* 查看状态按钮 */
-    .device-card .status-btn {
+    /* ===== 查看详情按钮 ===== */
+    .device-card .detail-btn {
         margin-top: 14px;
         padding: 10px 0;
         width: 100%;
         border: none;
         border-radius: 8px;
-        background: #f0f4f9;
-        color: #1a2332;
+        background: #4f8cf7;
+        color: white;
         font-weight: 600;
         font-size: 14px;
         cursor: pointer;
@@ -249,93 +244,13 @@
         align-items: center;
         justify-content: center;
         gap: 6px;
+        text-decoration: none;
     }
-    .device-card .status-btn:hover {
-        background: #e3e8ef;
+    .device-card .detail-btn:hover {
+        background: #3b7ae0;
     }
-    .device-card .status-btn:active {
+    .device-card .detail-btn:active {
         transform: scale(0.97);
-    }
-
-    /* ===== 状态面板 ===== */
-    #statusPanel {
-        margin-top: 28px;
-        background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #eef2f6;
-        padding: 24px 28px 22px 28px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        display: none;
-        animation: fadeIn 0.3s ease;
-    }
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    #statusPanel .panel-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #f0f2f5;
-        padding-bottom: 14px;
-        margin-bottom: 18px;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-    #statusPanel .panel-head h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 600;
-        color: #1a2332;
-    }
-    #statusPanel .panel-head .type-badge {
-        background: #f0f4f9;
-        padding: 4px 16px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 500;
-        color: #3d4e62;
-    }
-    #statusPanel .status-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px 40px;
-    }
-    #statusPanel .status-item {
-        display: flex;
-        justify-content: space-between;
-        padding: 10px 0;
-        border-bottom: 1px solid #f7f8fa;
-    }
-    #statusPanel .status-item .label {
-        color: #7a8a9b;
-        font-size: 14px;
-    }
-    #statusPanel .status-item .value {
-        font-weight: 600;
-        color: #1a2332;
-        font-size: 15px;
-    }
-    #statusPanel .status-item .value .unit {
-        font-weight: 400;
-        color: #8c9aab;
-        font-size: 13px;
-        margin-left: 2px;
-    }
-    #statusPanel .close-btn {
-        margin-top: 20px;
-        padding: 10px 28px;
-        background: #f5f7fa;
-        border: none;
-        border-radius: 8px;
-        font-weight: 500;
-        font-size: 14px;
-        color: #4b5563;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-    #statusPanel .close-btn:hover {
-        background: #eaeef2;
     }
 
     /* ===== 占位文字 ===== */
@@ -361,9 +276,6 @@
         .device-grid {
             grid-template-columns: 1fr 1fr;
         }
-        #statusPanel .status-grid {
-            grid-template-columns: 1fr;
-        }
     }
     @media (max-width: 500px) {
         .device-grid {
@@ -371,9 +283,6 @@
         }
         .device-topbar .right {
             flex-wrap: wrap;
-        }
-        #statusPanel {
-            padding: 16px;
         }
     }
 </style>
@@ -417,37 +326,6 @@
 <div id="deviceList" class="device-grid">
     <p class="loading-text">⏳ 正在加载设备列表…</p>
 </div>
-
-<!-- ===== 状态面板 ===== -->
-<section id="statusPanel">
-    <div class="panel-head">
-        <h2 id="statusDeviceName">📊 设备状态</h2>
-        <span id="statusDeviceType" class="type-badge">--</span>
-    </div>
-    <div class="status-grid">
-        <div class="status-item">
-            <span class="label">设备编码</span>
-            <span class="value" id="statusDeviceCode">--</span>
-        </div>
-        <div class="status-item">
-            <span class="label">在线状态</span>
-            <span class="value" id="statusOnline" style="font-size:14px; font-weight:500;">--</span>
-        </div>
-        <div class="status-item">
-            <span class="label">当前功率</span>
-            <span class="value" id="statusPower">-- <span class="unit">kW</span></span>
-        </div>
-        <div class="status-item" id="statusSocRow" style="display:none;">
-            <span class="label">储能 SOC</span>
-            <span class="value" id="statusSoc">-- <span class="unit">%</span></span>
-        </div>
-        <div class="status-item" style="grid-column: 1 / -1; border-bottom: none;">
-            <span class="label">更新时间</span>
-            <span class="value" id="statusUpdatedAt" style="font-weight:400; color:#6b7a8c; font-size:14px;">--</span>
-        </div>
-    </div>
-    <button id="closeStatusBtn" class="close-btn">✕ 关闭状态</button>
-</section>
 
 {% endblock %}
 

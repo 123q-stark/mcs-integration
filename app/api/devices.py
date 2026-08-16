@@ -60,14 +60,13 @@ def get_device_status(
     service: DeviceService = Depends(get_device_service),
 ):
     """
-    获取设备实时状态
-    - **device_id**: 设备 ID
-    - 直接从 Simulator 读取最新状态（实时更新）
+    获取设备实时状态（A-P0-01: 纯只读，不推进时间）
     """
     try:
         ems_service = request.app.state.service
-        # 直接从 Simulator 读取最新状态，绕过缓存
-        state = ems_service.device.read_state()
+        # A-P0-01: 使用 get_state_without_advance() 代替 read_state()
+        # read_state() 会推进时间，违反只读语义
+        state = ems_service.device.get_state_without_advance()
         return service.get_device_status(device_id, state)
     except DeviceNotFoundError:
         raise HTTPException(
@@ -81,7 +80,7 @@ def get_device_status(
         )
 
 
-# ==================== A-06: 设备历史数据接口（使用 DeviceTelemetry） ====================
+# ==================== A-P1-05: 设备历史数据接口（兼容 limit 和 hours） ====================
 from app.models.device_telemetry import DeviceTelemetry
 from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 from datetime import datetime, timedelta
@@ -91,13 +90,15 @@ from datetime import datetime, timedelta
 def get_device_history(
     device_id: int,
     request: Request,
-    hours: int = 24,
+    limit: Optional[int] = None,  # A-P1-05: 新增 limit 参数，优先使用
+    hours: int = 24,              # A-P1-05: 保留 hours 作为兼容参数
     db: Session = Depends(get_db),
 ):
     """
-    获取设备历史数据
-    - **device_id**: 设备 ID
-    - **hours**: 查询过去 N 小时的数据（默认 24，最大 720 = 30天）
+    获取设备历史数据（A-P1-05: 支持 limit 和 hours 两种方式）
+
+    - **limit**: 返回记录数（1~2880），优先使用
+    - **hours**: 查询过去 N 小时的数据（默认 24），当 limit 未提供时使用
     """
     # 1. 检查设备是否存在
     repo = DeviceRepository(db)
@@ -108,28 +109,35 @@ def get_device_history(
             detail=f"设备 ID {device_id} 不存在",
         )
 
-    # 2. 限制查询范围（1~720小时，即15分钟~30天）
-    if hours > 720:
-        hours = 720
-    if hours < 1:
-        hours = 1
+    # 2. A-P1-05: 确定实际 limit 值
+    if limit is not None:
+        # limit 优先，限制范围 1~2880（30天 × 96点）
+        if limit < 1:
+            limit = 1
+        if limit > 2880:
+            limit = 2880
+    else:
+        # hours 作为兼容参数，转换为 limit
+        if hours > 720:
+            hours = 720
+        if hours < 1:
+            hours = 1
+        limit = hours * 4
 
-    # 3. 计算记录数（15分钟步长 = 4条/小时）
-    limit = hours * 4
-
-    # 4. 通过 DeviceTelemetryRepository 查询
+    # 3. 通过 DeviceTelemetryRepository 查询
     telemetry_repo = DeviceTelemetryRepository(db)
     records = telemetry_repo.get_history(
         device_code=device.device_code,
         limit=limit,
     )
 
-    # 5. 构造返回数据
+    # 4. 构造返回数据
     return {
         "device_id": device_id,
         "device_code": device.device_code,
         "device_type": device.device_type,
         "device_name": device.device_name,
+        "limit": limit,  # A-P1-05: 返回实际使用的 limit 值
         "data": [
             {
                 "time": r.created_at.isoformat(),
@@ -163,7 +171,7 @@ def get_system_state(
         )
 
 
-# ==================== A-07: 充电桩手动控制接口 ====================
+# ==================== A-07: 充电桩手动控制接口（A-P1-07 修改） ====================
 from pydantic import BaseModel
 from typing import Literal
 
@@ -181,7 +189,7 @@ def control_device(
     db: Session = Depends(get_db),
 ):
     """
-    控制设备（目前仅支持充电桩 start/stop）
+    控制设备（A-P1-07: 走正式 DeviceExecutionPort）
     - **device_id**: 设备 ID
     - **command**: start / stop
     """
@@ -204,59 +212,62 @@ def control_device(
             detail=f"设备 {device.device_code} 不是充电桩，无法控制",
         )
 
-    # 2. 获取 Simulator 实例
-    ems_service = request.app.state.service
-    if ems_service is None:
-        print("[API] ❌ ems_service is None")
+    # 2. 获取 DeviceExecutionPort（A-P1-07: 使用正式 Port）
+    execution_port = request.app.state.device_execution_port
+    if execution_port is None:
+        print("[API] ❌ device_execution_port is None")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="EMS 服务尚未初始化",
+            detail="执行端口尚未初始化",
         )
 
-    simulator = ems_service.device
-    if simulator is None:
-        print("[API] ❌ simulator is None")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="模拟器尚未初始化",
-        )
+    # 3. 构造 ManualDeviceControl
+    from app.schemas.common import ManualDeviceControl
+    manual_cmd = ManualDeviceControl(
+        device_code=device.device_code,
+        command=control_req.command,
+        target_power_kw=None,
+    )
 
-    print(f"[API] 获取到 Simulator: {id(simulator)}")
+    # 4. 通过正式 Port 执行
+    try:
+        result = execution_port.manual_control(manual_cmd)
+    except AttributeError:
+        # 如果 manual_control 方法不存在，降级到原有逻辑
+        print("[API] ⚠️ manual_control 方法不存在，使用降级逻辑")
+        ems_service = request.app.state.service
+        simulator = ems_service.device
+        if control_req.command == "start":
+            success = simulator.set_charger_enabled(device.device_code, True)
+            message = f"充电桩 {device.device_code} 已启用（降级）"
+        else:
+            success = simulator.set_charger_enabled(device.device_code, False)
+            message = f"充电桩 {device.device_code} 已停用（降级）"
+        return {
+            "success": success,
+            "message": message,
+            "device_code": device.device_code,
+            "command": control_req.command,
+            "mode": "fallback",
+        }
 
-    # 3. 执行控制命令
-    if control_req.command == "start":
-        print(f"[API] 准备启动充电桩: {device.device_code}")
-        success = simulator.set_charger_enabled(device.device_code, True)
-        message = f"充电桩 {device.device_code} 已启用"
-    elif control_req.command == "stop":
-        print(f"[API] 准备停止充电桩: {device.device_code}")
-        success = simulator.set_charger_enabled(device.device_code, False)
-        message = f"充电桩 {device.device_code} 已停用"
+    # 5. 返回结果
+    if result.get("success", False):
+        return {
+            "success": True,
+            "message": result.get("message", ""),
+            "device_code": device.device_code,
+            "command": control_req.command,
+            "power_kw": result.get("power_kw", 0.0),
+            "enabled": result.get("enabled", False),
+            "status": result.get("status", "unknown"),
+            "mode": "port",
+        }
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的命令: {control_req.command}",
-        )
-
-    print(f"[API] set_charger_enabled 返回: {success}")
-    if not success:
-        raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"控制充电桩 {device.device_code} 失败",
+            detail=result.get("message", "控制失败"),
         )
-
-    # 重新获取最新状态（验证是否已更改）
-    updated_chargers = simulator.get_chargers()
-    for c in updated_chargers:
-        if c.device_code == device.device_code:
-            print(f"[API] 更新后状态: {c.device_code} -> enabled={c.enabled}, power={c.power_kw}")
-
-    return {
-        "success": True,
-        "message": message,
-        "device_code": device.device_code,
-        "command": control_req.command,
-    }
 
 
 # ==================== A-11: 快速历史生成 ====================
