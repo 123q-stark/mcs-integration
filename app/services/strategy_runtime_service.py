@@ -9,10 +9,13 @@
 6. 保存策略运行记录（含 schedule JSON）
 """
 import logging
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import json
 import math
+
+from sqlalchemy.exc import OperationalError
 
 from app.schemas import SystemState, ControlDecision, ControlExecutionResult
 from app.schemas.algorithm import ForecastResult, OptimizationResult, SchedulePoint
@@ -114,7 +117,7 @@ class StrategyRuntimeService:
                     "forecast_available": load_forecast is not None and len(load_forecast.points) > 0,
                     "schedule_available": optimization is not None and optimization.success,
                     "any_device_error": False,  # 可扩展
-                    "current_price_level": self._get_current_price_level(),
+                    "current_price_level": self._get_current_price_level(state.simulated_hour),
                     "pv_power": state.pv_power,
                     "load_power": state.load_power,
                 }
@@ -235,14 +238,15 @@ class StrategyRuntimeService:
             logger.error(f"获取电价序列失败: {e}")
             return [0.5] * 96
 
-    def _get_current_price_level(self) -> str:
-        """获取当前电价级别（用于 AUTO 推荐）"""
+    # ===== B-P1-05 + v1.6: 使用仿真时间而非系统时间 =====
+    def _get_current_price_level(self, simulated_hour: float) -> str:
+        """根据仿真时间获取当前电价级别"""
         try:
             from app.repositories.price_repository import PriceRepository
             with self.db.session() as session:
                 repo = PriceRepository(session)
                 config = repo.get_config()
-                hour = datetime.now().hour
+                hour = int(simulated_hour) % 24
                 if 10 <= hour < 15 or 18 <= hour < 21:
                     return "peak"
                 elif 0 <= hour < 7 or 23 <= hour < 24:
@@ -273,6 +277,7 @@ class StrategyRuntimeService:
             mode=mode,
         )
 
+    # ===== v1.6: 完整写入 + 重试机制 + 追溯字段 =====
     def _save_run_record(
         self,
         state: SystemState,
@@ -285,58 +290,95 @@ class StrategyRuntimeService:
         pv_forecast: Optional[ForecastResult] = None,
         optimization: Optional[OptimizationResult] = None,
     ) -> Optional[Dict]:
-        try:
-            from app.models.strategy_run import StrategyRunModel
+        """保存策略运行记录（含追溯字段和重试机制）"""
+        from app.database import Database
+        from app.config import Settings
+        from app.models.strategy_run import StrategyRunModel
 
-            with self.db.session() as session:
-                # 序列化预测数据
-                load_json = None
-                if load_forecast and load_forecast.points:
-                    load_json = json.dumps([
-                        {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                        for p in load_forecast.points
-                    ])
+        # 创建独立的数据库会话，避免与主事务冲突
+        settings = Settings.from_env()
+        db = Database(settings.database_url)
 
-                pv_json = None
-                if pv_forecast and pv_forecast.points:
-                    pv_json = json.dumps([
-                        {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                        for p in pv_forecast.points
-                    ])
+        max_retries = 3
+        retry_delay = 0.5
 
-                # 序列化调度计划（v1.4 新增）
-                schedule_json = None
-                if optimization and optimization.schedule:
-                    schedule_json = json.dumps([
-                        {
-                            "timestamp": p.timestamp.isoformat(),
-                            "power": p.storage_power_target_kw,
-                            "soc": p.predicted_soc
-                        }
-                        for p in optimization.schedule
-                    ])
+        for attempt in range(max_retries):
+            try:
+                with db.session() as session:
+                    # 序列化预测数据
+                    load_json = None
+                    if load_forecast and load_forecast.points:
+                        load_json = json.dumps([
+                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                            for p in load_forecast.points
+                        ])
 
-                record = StrategyRunModel(
-                    created_at=datetime.now(),
-                    requested_mode=requested_mode,
-                    effective_mode=effective_mode,
-                    fallback_used=fallback_used,
-                    storage_power_target=decision.storage_power_target,
-                    action=decision.action,
-                    message=decision.message,
-                    source=decision.source,
-                    status="success" if execution.success else "failed",
-                    load_forecast_json=load_json,
-                    pv_forecast_json=pv_json,
-                    schedule_json=schedule_json,
-                )
-                session.add(record)
-                session.commit()
-                session.refresh(record)
-                return {"id": record.id}
-        except Exception as e:
-            logger.error(f"保存运行记录失败: {e}")
-            return None
+                    pv_json = None
+                    if pv_forecast and pv_forecast.points:
+                        pv_json = json.dumps([
+                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                            for p in pv_forecast.points
+                        ])
+
+                    schedule_json = None
+                    if optimization and optimization.schedule:
+                        schedule_json = json.dumps([
+                            {
+                                "timestamp": p.timestamp.isoformat(),
+                                "power": p.storage_power_target_kw,
+                                "soc": p.predicted_soc
+                            }
+                            for p in optimization.schedule
+                        ])
+
+                    # 处理 execution 可能是字典或对象
+                    if isinstance(execution, dict):
+                        exec_success = execution.get("success", False)
+                        exec_message = execution.get("message")
+                    else:
+                        exec_success = execution.success
+                        exec_message = execution.message
+
+                    # ===== v1.6: 添加追溯字段 =====
+                    record = StrategyRunModel(
+                        created_at=datetime.now(),
+                        requested_mode=requested_mode,
+                        effective_mode=effective_mode,
+                        fallback_used=fallback_used,
+                        storage_power_target=decision.storage_power_target,
+                        action=decision.action,
+                        message=decision.message,
+                        source=decision.source,
+                        status="success" if exec_success else "failed",
+                        # 追溯字段
+                        forecast_model_load=load_forecast.model_name if load_forecast else None,
+                        forecast_model_pv=pv_forecast.model_name if pv_forecast else None,
+                        optimizer_name=optimization.optimizer_name if optimization else None,
+                        algorithm_message=decision.message if decision else None,
+                        execution_message=exec_message,
+                        # JSON 字段
+                        load_forecast_json=load_json,
+                        pv_forecast_json=pv_json,
+                        schedule_json=schedule_json,
+                    )
+                    session.add(record)
+                    session.commit()
+                    session.refresh(record)
+                    return {"id": record.id}
+
+            except OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    logger.warning(f"数据库被锁，重试 {attempt + 1}/{max_retries}...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                raise
+            except Exception as e:
+                logger.error(f"保存运行记录失败: {e}")
+                return None
+
+        logger.error(f"保存运行记录失败（已重试 {max_retries} 次）")
+        return None
 
     def get_latest_run(self) -> Optional[Dict]:
         try:
@@ -358,6 +400,13 @@ class StrategyRuntimeService:
                     "message": record.message,
                     "source": record.source,
                     "status": record.status,
+                    # v1.6: 追溯字段
+                    "forecast_model_load": record.forecast_model_load,
+                    "forecast_model_pv": record.forecast_model_pv,
+                    "optimizer_name": record.optimizer_name,
+                    "algorithm_message": record.algorithm_message,
+                    "execution_message": record.execution_message,
+                    # JSON 字段
                     "load_forecast_json": record.load_forecast_json,
                     "pv_forecast_json": record.pv_forecast_json,
                     "schedule_json": record.schedule_json,
