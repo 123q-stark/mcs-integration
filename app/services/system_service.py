@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from datetime import datetime
 
 from sqlalchemy import delete, select
@@ -17,9 +16,6 @@ from app.schemas import (
 )
 from app.strategies.base import EnergyStrategy
 from app.repositories.strategy_repository import StrategyRepository
-
-# ===== 全局写入锁，防止数据库锁冲突 =====
-_db_write_lock = threading.Lock()
 
 
 class EMSService:
@@ -46,6 +42,10 @@ class EMSService:
         self._latest_system_state: SystemState | None = None
 
     async def run_cycle(self) -> StatusResponse:
+        """
+        执行一个策略周期（由后台循环调用）
+        注意：此方法不写入 strategy_runs，只更新设备状态和系统历史
+        """
         async with self._lock:
             state_before = self.device.read_state()
 
@@ -57,7 +57,7 @@ class EMSService:
             # 将配置传入策略
             decision = self.strategy.calculate(state_before, config)
 
-            # ===== A 公共文件修改：使用 step_with_control 替代 execute_command =====
+            # 使用 step_with_control 推进仿真
             state_after = self.device.step_with_control(
                 storage_power_target=decision.storage_power_target
             )
@@ -73,27 +73,26 @@ class EMSService:
                 updated_at=datetime.now(),
             )
 
-            # ===== 使用全局写入锁防止数据库锁 =====
-            with _db_write_lock:
-                with self.database.session() as db:
-                    db.add(
-                        SystemHistory(
-                            created_at=status.updated_at,
-                            pv_power=status.pv_power,
-                            load_power=status.load_power,
-                            storage_power=status.storage_power,
-                            storage_soc=status.storage_soc,
-                        )
+            # 后台循环只写 system_history 和 control_commands，不写 strategy_runs
+            with self.database.session() as db:
+                db.add(
+                    SystemHistory(
+                        created_at=status.updated_at,
+                        pv_power=status.pv_power,
+                        load_power=status.load_power,
+                        storage_power=status.storage_power,
+                        storage_soc=status.storage_soc,
                     )
-                    db.add(
-                        ControlCommand(
-                            created_at=status.updated_at,
-                            command_value=decision.storage_power_target,
-                            action=decision.action,
-                            strategy_message=decision.message,
-                            execute_result="执行成功",
-                        )
+                )
+                db.add(
+                    ControlCommand(
+                        created_at=status.updated_at,
+                        command_value=decision.storage_power_target,
+                        action=decision.action,
+                        strategy_message=decision.message,
+                        execute_result="执行成功",
                     )
+                )
 
             self._latest_status = status
             return status
@@ -161,7 +160,7 @@ class EMSService:
             # 将配置传入策略
             decision = self.strategy.calculate(state_before, config)
 
-            # ===== A 公共文件修改：使用 step_with_control 替代 execute_command =====
+            # 使用 step_with_control
             state_after = self.device.step_with_control(
                 storage_power_target=decision.storage_power_target
             )
