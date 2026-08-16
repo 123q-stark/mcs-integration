@@ -9,13 +9,15 @@
 6. 保存策略运行记录（含 schedule JSON）
 """
 import logging
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import json
-import math
+
+from sqlalchemy.exc import OperationalError
 
 from app.schemas import SystemState, ControlDecision, ControlExecutionResult
-from app.schemas.algorithm import ForecastResult, OptimizationResult, SchedulePoint
+from app.schemas.algorithm import ForecastResult, OptimizationResult
 from app.services.algorithm_bridge_service import AlgorithmBridgeService
 from app.strategies.fixed_rule import FixedRuleStrategy
 
@@ -275,6 +277,7 @@ class StrategyRuntimeService:
             mode=mode,
         )
 
+    # ===== 修复：添加重试机制，防止 database is locked =====
     def _save_run_record(
         self,
         state: SystemState,
@@ -287,72 +290,88 @@ class StrategyRuntimeService:
         pv_forecast: Optional[ForecastResult] = None,
         optimization: Optional[OptimizationResult] = None,
     ) -> Optional[Dict]:
-        try:
-            from app.models.strategy_run import StrategyRunModel
+        from app.models.strategy_run import StrategyRunModel
 
-            with self.db.session() as session:
-                # 序列化预测数据
-                load_json = None
-                if load_forecast and load_forecast.points:
-                    load_json = json.dumps([
-                        {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                        for p in load_forecast.points
-                    ])
+        max_retries = 3
+        retry_delay = 0.5
+        last_error = None
 
-                pv_json = None
-                if pv_forecast and pv_forecast.points:
-                    pv_json = json.dumps([
-                        {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                        for p in pv_forecast.points
-                    ])
+        for attempt in range(max_retries):
+            try:
+                with self.db.session() as session:
+                    # 序列化预测数据
+                    load_json = None
+                    if load_forecast and load_forecast.points:
+                        load_json = json.dumps([
+                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                            for p in load_forecast.points
+                        ])
 
-                # 序列化调度计划（v1.4 新增）
-                schedule_json = None
-                if optimization and optimization.schedule:
-                    schedule_json = json.dumps([
-                        {
-                            "timestamp": p.timestamp.isoformat(),
-                            "power": p.storage_power_target_kw,
-                            "soc": p.predicted_soc
-                        }
-                        for p in optimization.schedule
-                    ])
+                    pv_json = None
+                    if pv_forecast and pv_forecast.points:
+                        pv_json = json.dumps([
+                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                            for p in pv_forecast.points
+                        ])
 
-                # ===== B-P0-07 新增：算法追溯字段 =====
-                # ===== 修复：execution 可能是字典 =====
-                if isinstance(execution, dict):
-                    exec_success = execution.get("success", False)
-                else:
-                    exec_success = execution.success
+                    schedule_json = None
+                    if optimization and optimization.schedule:
+                        schedule_json = json.dumps([
+                            {
+                                "timestamp": p.timestamp.isoformat(),
+                                "power": p.storage_power_target_kw,
+                                "soc": p.predicted_soc
+                            }
+                            for p in optimization.schedule
+                        ])
 
-                record = StrategyRunModel(
-                    created_at=datetime.now(),
-                    requested_mode=requested_mode,
-                    effective_mode=effective_mode,
-                    fallback_used=fallback_used,
-                    storage_power_target=decision.storage_power_target,
-                    action=decision.action,
-                    message=decision.message,
-                    source=decision.source,
-                    status="success" if exec_success else "failed",
-                    # 新增追溯字段
-                    forecast_model_load=load_forecast.model_name if load_forecast else None,
-                    forecast_model_pv=pv_forecast.model_name if pv_forecast else None,
-                    optimizer_name=optimization.optimizer_name if optimization else None,
-                    algorithm_message=decision.message if decision else None,
-                    execution_message=execution.get("message") if isinstance(execution, dict) else execution.message,
-                    # JSON 字段
-                    load_forecast_json=load_json,
-                    pv_forecast_json=pv_json,
-                    schedule_json=schedule_json,
-                )
-                session.add(record)
-                session.commit()
-                session.refresh(record)
-                return {"id": record.id}
-        except Exception as e:
-            logger.error(f"保存运行记录失败: {e}")
-            return None
+                    # 处理 execution 可能是字典或对象
+                    if isinstance(execution, dict):
+                        exec_success = execution.get("success", False)
+                        exec_message = execution.get("message")
+                    else:
+                        exec_success = execution.success
+                        exec_message = execution.message
+
+                    record = StrategyRunModel(
+                        created_at=datetime.now(),
+                        requested_mode=requested_mode,
+                        effective_mode=effective_mode,
+                        fallback_used=fallback_used,
+                        storage_power_target=decision.storage_power_target,
+                        action=decision.action,
+                        message=decision.message,
+                        source=decision.source,
+                        status="success" if exec_success else "failed",
+                        # 新增追溯字段
+                        forecast_model_load=load_forecast.model_name if load_forecast else None,
+                        forecast_model_pv=pv_forecast.model_name if pv_forecast else None,
+                        optimizer_name=optimization.optimizer_name if optimization else None,
+                        algorithm_message=decision.message if decision else None,
+                        execution_message=exec_message,
+                        # JSON 字段
+                        load_forecast_json=load_json,
+                        pv_forecast_json=pv_json,
+                        schedule_json=schedule_json,
+                    )
+                    session.add(record)
+                    session.commit()
+                    session.refresh(record)
+                    return {"id": record.id}
+
+            except OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    logger.warning(f"数据库被锁，重试 {attempt + 1}/{max_retries}...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                    continue
+                raise
+            except Exception as e:
+                logger.error(f"保存运行记录失败: {e}")
+                return None
+
+        logger.error(f"保存运行记录失败（已重试 {max_retries} 次）")
+        return None
 
     def get_latest_run(self) -> Optional[Dict]:
         try:
@@ -363,7 +382,6 @@ class StrategyRuntimeService:
                 ).first()
                 if record is None:
                     return None
-                # ===== B-P0-07 新增：返回追溯字段 =====
                 return {
                     "id": record.id,
                     "created_at": record.created_at,
