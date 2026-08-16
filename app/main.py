@@ -55,9 +55,18 @@ def create_app(
         app.state.database = database
         app.state.service = service
 
-        # 4. B-09: 将设备端口暴露给 API 使用
-        app.state.device_read_port = device
-        app.state.device_execution_port = device
+        # 4. 注入设备运行时服务（A 公共文件修改）
+        from app.services.device_runtime_service import DeviceRuntimeService
+        from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
+
+        with database.session() as db:
+            telemetry_repo = DeviceTelemetryRepository(db)
+            runtime_service = DeviceRuntimeService(device, telemetry_repo)
+
+        app.state.device_runtime_service = runtime_service
+        app.state.device_read_port = runtime_service
+        app.state.device_execution_port = runtime_service
+        app.state.device = device
 
         # 5. 启动时先执行一次，保证页面第一次访问就有数据
         await service.run_cycle()
