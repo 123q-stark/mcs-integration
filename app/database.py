@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -27,12 +27,18 @@ class Database:
         if database_url.startswith("sqlite"):
             connect_args["timeout"] = 30
 
-        # 使用 NullPool 避免连接复用问题
         self.engine = create_engine(
             database_url,
             connect_args=connect_args,
             poolclass=NullPool,
         )
+
+        # ===== 强制启用 WAL 模式（使用 text() 包裹） =====
+        with self.engine.connect() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL"))
+            conn.execute(text("PRAGMA synchronous=NORMAL"))
+            conn.execute(text("PRAGMA busy_timeout=30000"))
+            conn.commit()
 
         @event.listens_for(self.engine, "connect")
         def set_sqlite_pragma(dbapi_connection, connection_record):
