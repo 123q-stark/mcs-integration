@@ -39,6 +39,7 @@ class SimulatorAdapter(DeviceAdapter):
 
         # ===== 当前模拟时间 =====
         self._simulated_hour = 6.0
+        self._simulated_day = 4
         self._timestamp = datetime.now()
 
         # ===== 更新状态 =====
@@ -235,7 +236,12 @@ class SimulatorAdapter(DeviceAdapter):
 
     def _next_environment(self) -> None:
         """推进一个时间步（15min）"""
+        # A-P1-08: 推进仿真日期（每96步一天）
         self._simulated_hour = (self._simulated_hour + self._simulation_step_hours) % 24.0
+        if self._simulated_hour < 0.25:  # 跨天
+            self._simulated_day = (self._simulated_day + 1) % 7
+        is_weekend = self._simulated_day >= 5  # 周六(5)或周日(6)
+        weekday_factor = 0.7 if is_weekend else 1.0  # 周末负荷降低30%
         self._timestamp = datetime.now()
 
         hour = self._simulated_hour
@@ -249,12 +255,13 @@ class SimulatorAdapter(DeviceAdapter):
         base_pv = base_pv * cloud_factor
         base_pv = max(0.0, round(base_pv, 2))
 
+        # A-P1-08: 周末负荷降低30%
         base_load = (
-            58.0
-            + 12.0 * math.sin((hour - 8.0) / 24.0 * 2.0 * math.pi)
-            + self._random.uniform(-4.0, 4.0)
+                (58.0 + 12.0 * math.sin((hour - 8.0) / 24.0 * 2.0 * math.pi))
+                * weekday_factor
+                + self._random.uniform(-4.0, 4.0)
         )
-        base_load = max(30.0, round(base_load, 2))
+        base_load = max(30.0 * weekday_factor, round(base_load, 2))
 
         self._update_pv_units(base_pv)
         self._update_chargers(base_load)
@@ -281,6 +288,7 @@ class SimulatorAdapter(DeviceAdapter):
                 self._random.seed(2026)
 
             self._simulated_hour = 6.0
+            self._simulated_day = 4
             self._timestamp = datetime.now()
 
             # A-P1-02: 重置 Battery 额定功率
