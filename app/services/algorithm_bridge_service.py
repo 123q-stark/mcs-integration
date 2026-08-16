@@ -159,6 +159,9 @@ class AlgorithmBridgeService:
             rmse=None
         )
 
+    # =========================================================
+    # 从 A 获取历史数据
+    # =========================================================
     def _get_history_data(self, target: str, days: int) -> Optional[pd.DataFrame]:
         """从数据库获取历史数据"""
         if self.device_read_port is None:
@@ -173,23 +176,27 @@ class AlgorithmBridgeService:
             logger.error(f"获取历史数据失败: {e}")
             return None
 
-    # ===== 修复：正确的缩进（作为类的方法） =====
+    # ===== v1.6 修复：移除 cutoff 时间限制，查询所有历史数据 =====
     def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
-        """从数据库直接读取历史数据"""
+        """从数据库直接读取历史数据（查询所有历史数据，不限制时间范围）"""
         try:
             from app.models.device_telemetry import DeviceTelemetry
 
-            cutoff = datetime.now() - timedelta(days=days)
+            # ===== v1.6 修复：移除 cutoff 时间限制 =====
+            # 原因：生成的历史数据时间戳可能早于 datetime.now() - days
+            # 导致查询为空，MILP 无法获取训练数据
+            # cutoff = datetime.now() - timedelta(days=days)
 
             if target == 'load':
                 charger_codes = [f"CHG{i:03d}" for i in range(1, 6)]
                 with self.db.session() as session:
+                    # ===== 移除 created_at >= cutoff 条件 =====
                     records = session.query(DeviceTelemetry).filter(
-                        DeviceTelemetry.device_code.in_(charger_codes),
-                        DeviceTelemetry.created_at >= cutoff
+                        DeviceTelemetry.device_code.in_(charger_codes)
                     ).order_by(DeviceTelemetry.created_at).all()
 
                     if not records:
+                        logger.warning(f"未找到充电桩历史数据: {charger_codes}")
                         return None
 
                     df = pd.DataFrame([{
@@ -205,12 +212,13 @@ class AlgorithmBridgeService:
             elif target == 'pv':
                 pv_codes = [f"PV{i:03d}" for i in range(1, 6)]
                 with self.db.session() as session:
+                    # ===== 移除 created_at >= cutoff 条件 =====
                     records = session.query(DeviceTelemetry).filter(
-                        DeviceTelemetry.device_code.in_(pv_codes),
-                        DeviceTelemetry.created_at >= cutoff
+                        DeviceTelemetry.device_code.in_(pv_codes)
                     ).order_by(DeviceTelemetry.created_at).all()
 
                     if not records:
+                        logger.warning(f"未找到 PV 历史数据: {pv_codes}")
                         return None
 
                     df = pd.DataFrame([{
