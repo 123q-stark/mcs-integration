@@ -173,53 +173,60 @@ class AlgorithmBridgeService:
             logger.error(f"获取历史数据失败: {e}")
             return None
 
-    def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
+        def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
         """从数据库直接读取历史数据"""
         try:
-            from app.models.device_telemetry import DeviceTelemetryModel
+            from app.models.device_telemetry import DeviceTelemetry
+
             cutoff = datetime.now() - timedelta(days=days)
 
             if target == 'load':
                 charger_codes = [f"CHG{i:03d}" for i in range(1, 6)]
-                query = self.db.query(DeviceTelemetryModel).filter(
-                    DeviceTelemetryModel.device_code.in_(charger_codes),
-                    DeviceTelemetryModel.created_at >= cutoff
-                ).order_by(DeviceTelemetryModel.created_at)
-                records = query.all()
-                if not records:
-                    return None
-                df = pd.DataFrame([{
-                    'timestamp': r.created_at,
-                    'device_code': r.device_code,
-                    'power_kw': r.power_kw or 0
-                } for r in records])
-                grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
-                grouped.columns = ['timestamp', 'load_kw']
-                return grouped.sort_values('timestamp')
+                with self.db.session() as session:
+                    records = session.query(DeviceTelemetry).filter(
+                        DeviceTelemetry.device_code.in_(charger_codes),
+                        DeviceTelemetry.created_at >= cutoff
+                    ).order_by(DeviceTelemetry.created_at).all()
+
+                    if not records:
+                        return None
+
+                    df = pd.DataFrame([{
+                        'timestamp': r.created_at,
+                        'device_code': r.device_code,
+                        'power_kw': r.power_kw or 0
+                    } for r in records])
+
+                    grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
+                    grouped.columns = ['timestamp', 'load_kw']
+                    return grouped.sort_values('timestamp')
 
             elif target == 'pv':
                 pv_codes = [f"PV{i:03d}" for i in range(1, 6)]
-                query = self.db.query(DeviceTelemetryModel).filter(
-                    DeviceTelemetryModel.device_code.in_(pv_codes),
-                    DeviceTelemetryModel.created_at >= cutoff
-                ).order_by(DeviceTelemetryModel.created_at)
-                records = query.all()
-                if not records:
-                    return None
-                df = pd.DataFrame([{
-                    'timestamp': r.created_at,
-                    'device_code': r.device_code,
-                    'power_kw': r.power_kw or 0
-                } for r in records])
-                grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
-                grouped.columns = ['timestamp', 'pv_kw']
-                return grouped.sort_values('timestamp')
+                with self.db.session() as session:
+                    records = session.query(DeviceTelemetry).filter(
+                        DeviceTelemetry.device_code.in_(pv_codes),
+                        DeviceTelemetry.created_at >= cutoff
+                    ).order_by(DeviceTelemetry.created_at).all()
+
+                    if not records:
+                        return None
+
+                    df = pd.DataFrame([{
+                        'timestamp': r.created_at,
+                        'device_code': r.device_code,
+                        'power_kw': r.power_kw or 0
+                    } for r in records])
+
+                    grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
+                    grouped.columns = ['timestamp', 'pv_kw']
+                    return grouped.sort_values('timestamp')
 
             return None
+
         except Exception as e:
             logger.error(f"从数据库读取历史数据失败: {e}")
             return None
-
     # =========================================================
     # v1.3 完善：储能调度优化（保持不变）
     # =========================================================
