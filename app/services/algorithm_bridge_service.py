@@ -173,55 +173,64 @@ class AlgorithmBridgeService:
             logger.error(f"获取历史数据失败: {e}")
             return None
 
+    # ===== 修复：正确的缩进（作为类的方法） =====
     def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
         """从数据库直接读取历史数据"""
         try:
-            from app.models.device_telemetry import DeviceTelemetryModel
+            from app.models.device_telemetry import DeviceTelemetry
+
             cutoff = datetime.now() - timedelta(days=days)
 
             if target == 'load':
                 charger_codes = [f"CHG{i:03d}" for i in range(1, 6)]
-                query = self.db.query(DeviceTelemetryModel).filter(
-                    DeviceTelemetryModel.device_code.in_(charger_codes),
-                    DeviceTelemetryModel.created_at >= cutoff
-                ).order_by(DeviceTelemetryModel.created_at)
-                records = query.all()
-                if not records:
-                    return None
-                df = pd.DataFrame([{
-                    'timestamp': r.created_at,
-                    'device_code': r.device_code,
-                    'power_kw': r.power_kw or 0
-                } for r in records])
-                grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
-                grouped.columns = ['timestamp', 'load_kw']
-                return grouped.sort_values('timestamp')
+                with self.db.session() as session:
+                    records = session.query(DeviceTelemetry).filter(
+                        DeviceTelemetry.device_code.in_(charger_codes),
+                        DeviceTelemetry.created_at >= cutoff
+                    ).order_by(DeviceTelemetry.created_at).all()
+
+                    if not records:
+                        return None
+
+                    df = pd.DataFrame([{
+                        'timestamp': r.created_at,
+                        'device_code': r.device_code,
+                        'power_kw': r.power_kw or 0
+                    } for r in records])
+
+                    grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
+                    grouped.columns = ['timestamp', 'load_kw']
+                    return grouped.sort_values('timestamp')
 
             elif target == 'pv':
                 pv_codes = [f"PV{i:03d}" for i in range(1, 6)]
-                query = self.db.query(DeviceTelemetryModel).filter(
-                    DeviceTelemetryModel.device_code.in_(pv_codes),
-                    DeviceTelemetryModel.created_at >= cutoff
-                ).order_by(DeviceTelemetryModel.created_at)
-                records = query.all()
-                if not records:
-                    return None
-                df = pd.DataFrame([{
-                    'timestamp': r.created_at,
-                    'device_code': r.device_code,
-                    'power_kw': r.power_kw or 0
-                } for r in records])
-                grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
-                grouped.columns = ['timestamp', 'pv_kw']
-                return grouped.sort_values('timestamp')
+                with self.db.session() as session:
+                    records = session.query(DeviceTelemetry).filter(
+                        DeviceTelemetry.device_code.in_(pv_codes),
+                        DeviceTelemetry.created_at >= cutoff
+                    ).order_by(DeviceTelemetry.created_at).all()
+
+                    if not records:
+                        return None
+
+                    df = pd.DataFrame([{
+                        'timestamp': r.created_at,
+                        'device_code': r.device_code,
+                        'power_kw': r.power_kw or 0
+                    } for r in records])
+
+                    grouped = df.groupby('timestamp')['power_kw'].sum().reset_index()
+                    grouped.columns = ['timestamp', 'pv_kw']
+                    return grouped.sort_values('timestamp')
 
             return None
+
         except Exception as e:
             logger.error(f"从数据库读取历史数据失败: {e}")
             return None
 
     # =========================================================
-    # v1.3 完善：储能调度优化（保持不变）
+    # v1.3 完善：储能调度优化（修复：避免重复获取配置）
     # =========================================================
     def get_optimization(self, load_forecast: ForecastResult, pv_forecast: ForecastResult,
                          price_series: List[float], current_soc: float,
@@ -230,11 +239,12 @@ class AlgorithmBridgeService:
             from app.repositories.strategy_repository import StrategyRepository
             from app.repositories.grid_strategy_repository import GridStrategyRepository
 
-            strategy_repo = StrategyRepository(self.db)
-            grid_repo = GridStrategyRepository(self.db)
-
-            strategy_config = strategy_repo.get_active_config()
-            grid_config = grid_repo.get_config()
+            # ===== 修复：在 with 块内获取所有配置 =====
+            with self.db.session() as session:
+                strategy_repo = StrategyRepository(session)
+                grid_repo = GridStrategyRepository(session)
+                strategy_config = strategy_repo.get_active_config()
+                grid_config = grid_repo.get_config()
 
             if strategy_config is None:
                 soc_min, soc_max = 20.0, 90.0
