@@ -159,6 +159,9 @@ class AlgorithmBridgeService:
             rmse=None
         )
 
+    # =========================================================
+    # 从 A 获取历史数据
+    # =========================================================
     def _get_history_data(self, target: str, days: int) -> Optional[pd.DataFrame]:
         """从数据库获取历史数据"""
         if self.device_read_port is None:
@@ -173,7 +176,7 @@ class AlgorithmBridgeService:
             logger.error(f"获取历史数据失败: {e}")
             return None
 
-        def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
+    def _get_history_from_db(self, target: str, days: int) -> Optional[pd.DataFrame]:
         """从数据库直接读取历史数据"""
         try:
             from app.models.device_telemetry import DeviceTelemetry
@@ -227,6 +230,7 @@ class AlgorithmBridgeService:
         except Exception as e:
             logger.error(f"从数据库读取历史数据失败: {e}")
             return None
+
     # =========================================================
     # v1.3 完善：储能调度优化（保持不变）
     # =========================================================
