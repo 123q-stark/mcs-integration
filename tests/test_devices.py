@@ -601,7 +601,9 @@ def test_get_state_without_advance_does_not_change_time():
     for _ in range(50):
         state = sim.get_state_without_advance()
         assert state.simulated_hour == t0
-# ==================== A-P0-03: 历史时间戳测试 ====================
+
+
+# ==================== A-P0-03: 历史时间戳测试（A-锁库修复适配） ====================
 
 def test_generate_history_has_15min_timeline():
     """A-P0-03: 验证生成的历史数据是15min连续时间序列"""
@@ -612,7 +614,6 @@ def test_generate_history_has_15min_timeline():
     import os
     from datetime import timedelta
 
-    # 创建临时数据库
     fd, path = tempfile.mkstemp(suffix='.db')
     os.close(fd)
     db_url = f"sqlite:///{path}"
@@ -624,12 +625,14 @@ def test_generate_history_has_15min_timeline():
     simulator = SimulatorAdapter()
     simulator.reset(seed=2026)
 
+    # A-锁库修复: DeviceRuntimeService 现在接收 Database，不是 telemetry_repo
+    service = DeviceRuntimeService(simulator, db)
+
+    service.generate_history(days=1, seed=2026)
+
+    # 使用独立 Session 查询
     with db.session() as session:
         telemetry_repo = DeviceTelemetryRepository(session)
-        service = DeviceRuntimeService(simulator, telemetry_repo)
-
-        service.generate_history(days=1, seed=2026)
-
         records = telemetry_repo.get_history("PV001", limit=100)
 
         assert len(records) == 96, f"PV001 应有 96 条记录，实际 {len(records)}"
