@@ -1297,3 +1297,5 @@ http://127.0.0.1:8000/api/history
 ```text
 http://127.0.0.1:8000/api/commands
 ```
+
+| v1.5 | `ems-v1.5` | 完整 Simulator EMS 验收（页面风格统一、全量测试通过、故障链验证） |
