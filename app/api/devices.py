@@ -270,10 +270,9 @@ def control_device(
         )
 
 
-# ==================== A-11: 快速历史生成 ====================
+# ==================== A-11: 快速历史生成（A-锁库修复适配） ====================
 from pydantic import BaseModel, Field
 from app.services.device_runtime_service import DeviceRuntimeService
-from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 import os
 
 
@@ -283,34 +282,29 @@ class GenerateHistoryRequest(BaseModel):
     seed: int = Field(2026, description="随机种子，确保可复现")
 
 
-def get_telemetry_repo(db: Session = Depends(get_db)) -> DeviceTelemetryRepository:
-    """获取设备遥测 Repository"""
-    return DeviceTelemetryRepository(db)
-
-
 def get_runtime_service(
     request: Request,
-    telemetry_repo: DeviceTelemetryRepository = Depends(get_telemetry_repo),
 ) -> DeviceRuntimeService:
     """
-    获取设备运行时服务
+    获取设备运行时服务（A-锁库修复: 注入 Database，不注入 Repository）
+
     依赖：
-    - request.app.state.service.device (SimulatorAdapter)
-    - telemetry_repo (DeviceTelemetryRepository)
+    - request.app.state.database (Database)
+    - request.app.state.device (SimulatorAdapter)
     """
-    ems_service = request.app.state.service
-    if ems_service is None:
+    database = request.app.state.database
+    if database is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="EMS 服务尚未初始化",
+            detail="数据库尚未初始化",
         )
-    simulator = ems_service.device
+    simulator = request.app.state.device
     if simulator is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="模拟器尚未初始化",
         )
-    return DeviceRuntimeService(simulator, telemetry_repo)
+    return DeviceRuntimeService(simulator, database)
 
 
 @router.post("/simulator/generate-history")
