@@ -47,10 +47,16 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             peak_idx = total_vars
             total_vars_with_peak = total_vars + 1
 
-            # 目标
+            # ===== 目标函数 =====
             c = np.zeros(total_vars_with_peak)
+            # 购电成本：grid_import 有成本
             c[num_p:num_p+num_g] = price * dt
+            # 峰值惩罚：小权重
             c[peak_idx] = 0.001
+            # ===== T06 修复：grid_export 添加微小惩罚，防止滥用售电变量 =====
+            # 如果允许售电，grid_export 有微小成本，使优化器在满足平衡时
+            # 优先使用储能（p_storage）而非售电，从而使电价影响储能调度。
+            c[num_p+num_g:num_p+num_g+num_e] = 0.001
 
             A_eq = []
             b_eq = []
