@@ -61,15 +61,20 @@ class StrategyRuntimeService:
         执行一个完整的策略运行周期（v1.4 支持 AUTO 和 MILP）
         """
         try:
+            logger.info("===== 开始策略运行周期 =====")
+
             # 1. 读取系统状态
             state = self._get_system_state()
             if state is None:
+                logger.error("无法获取系统状态")
                 return {"success": False, "error": "无法获取系统状态"}
             self.current_state = state
+            logger.info(f"系统状态: SOC={state.storage_soc}%, PV={state.pv_power}kW, Load={state.load_power}kW, Hour={state.simulated_hour}")
 
             # 2. 读取策略配置
             config = self._get_strategy_config()
             if config is None:
+                logger.error("无法获取策略配置")
                 return {"success": False, "error": "无法获取策略配置"}
 
             requested_mode = config.requested_mode
@@ -80,18 +85,36 @@ class StrategyRuntimeService:
             pv_forecast = None
             optimization = None
 
+            logger.info(f"当前 requested_mode = {requested_mode}")
+
             # 3. 根据 requested_mode 决定是否调用 C 算法
             if requested_mode in ["ECONOMIC_SCHEDULE", "AUTO", "GRID_BACKUP"]:
+                logger.info("进入优化分支（requested_mode 符合条件）")
                 try:
                     # 获取预测
+                    logger.info("开始获取负荷预测...")
                     load_forecast = self.bridge.get_load_forecast(history_days=30)
-                    pv_forecast = self.bridge.get_pv_forecast(history_days=30)
                     self.load_forecast = load_forecast
+                    if load_forecast:
+                        logger.info(f"负荷预测获取成功，点数={len(load_forecast.points)}，模型={load_forecast.model_name}")
+                    else:
+                        logger.warning("负荷预测返回 None")
+
+                    logger.info("开始获取 PV 预测...")
+                    pv_forecast = self.bridge.get_pv_forecast(history_days=30)
                     self.pv_forecast = pv_forecast
+                    if pv_forecast:
+                        logger.info(f"PV 预测获取成功，点数={len(pv_forecast.points)}，模型={pv_forecast.model_name}")
+                    else:
+                        logger.warning("PV 预测返回 None")
 
                     # 如果有预测数据，尝试优化
                     if load_forecast and load_forecast.points and pv_forecast and pv_forecast.points:
+                        logger.info(f"预测数据有效，开始获取价格序列...")
                         price_series = self._get_price_series()
+                        logger.info(f"价格序列长度={len(price_series)}")
+
+                        logger.info("开始调用 MILP 优化...")
                         optimization = self.bridge.get_optimization(
                             load_forecast=load_forecast,
                             pv_forecast=pv_forecast,
@@ -100,13 +123,24 @@ class StrategyRuntimeService:
                         )
                         self.optimization = optimization
 
-                        # 如果优化成功，使用优化结果
-                        if optimization and optimization.success and optimization.schedule:
-                            effective_mode = "ECONOMIC_SCHEDULE"
-                            logger.info("使用 MILP 优化调度")
+                        if optimization:
+                            logger.info(f"MILP 优化返回，success={optimization.success}, 调度点数={len(optimization.schedule) if optimization.schedule else 0}, message={optimization.message}")
+                            if optimization.success and optimization.schedule:
+                                effective_mode = "ECONOMIC_SCHEDULE"
+                                logger.info("=== 使用 MILP 优化调度 ===")
+                            else:
+                                logger.warning("MILP 优化失败或返回空结果，将回退到 FixedRule")
+                        else:
+                            logger.error("optimization 为 None")
+                    else:
+                        logger.warning(f"预测数据无效: load_forecast={bool(load_forecast)}, load_points={len(load_forecast.points) if load_forecast else 0}, pv_forecast={bool(pv_forecast)}, pv_points={len(pv_forecast.points) if pv_forecast else 0}")
+
                 except Exception as e:
-                    logger.warning(f"C算法调用失败: {e}，回退到 FixedRule")
+                    import traceback
+                    logger.error(f"C算法调用异常: {e}\n{traceback.format_exc()}")
                     fallback_used = True
+            else:
+                logger.info(f"当前 requested_mode={requested_mode}，不触发优化分支")
 
             # 4. 如果 requested_mode == "AUTO"，调用 AUTO 推荐算法
             if requested_mode == "AUTO" and optimization and optimization.success:
@@ -131,12 +165,13 @@ class StrategyRuntimeService:
 
             # 5. 生成控制决策
             if optimization and optimization.success and optimization.schedule:
+                logger.info("基于 MILP 生成决策")
                 decision = self._generate_decision_from_optimization(
                     state, optimization, effective_mode
                 )
                 decision.source = "milp"
             else:
-                # 使用 FixedRule 作为 fallback
+                logger.info("使用 FixedRule 生成决策")
                 decision = self.fixed_rule.calculate(state, config)
                 # 根据 requested_mode 调整 effective_mode
                 if requested_mode == "SAFE":
@@ -166,7 +201,13 @@ class StrategyRuntimeService:
                     executed_at=datetime.now(),
                 )
 
-            # 7. 保存运行记录（包含 schedule JSON）
+            # 7. 计算 overall_success（A 执行失败时整体失败）
+            if isinstance(execution_result, dict):
+                execution_success = execution_result.get("success", False)
+            else:
+                execution_success = execution_result.success
+
+            # 8. 保存运行记录（包含 schedule JSON）
             run_record = self._save_run_record(
                 state=state,
                 decision=decision,
@@ -179,8 +220,13 @@ class StrategyRuntimeService:
                 optimization=optimization,
             )
 
+            logger.info("===== 策略运行周期完成 =====")
+
+            # 最终返回：overall_success 取决于 A 执行是否成功
+            overall_success = execution_success
+
             return {
-                "success": True,
+                "success": overall_success,
                 "decision": decision,
                 "execution": execution_result,
                 "effective_mode": effective_mode,
@@ -277,7 +323,7 @@ class StrategyRuntimeService:
             mode=mode,
         )
 
-    # ===== v1.6: 完整写入 + 重试机制 + 追溯字段 =====
+    # ===== v1.6: 修复版 - 使用短 Session 写入 =====
     def _save_run_record(
         self,
         state: SystemState,
@@ -291,106 +337,84 @@ class StrategyRuntimeService:
         optimization: Optional[OptimizationResult] = None,
     ) -> Optional[Dict]:
         """
-        保存策略运行记录（含追溯字段和重试机制）
-        v1.6 验收模式：临时禁用写入以绕过 database is locked
+        保存策略运行记录（使用短生命周期 Session）
+        修复说明：
+        - 删除临时禁用 workaround
+        - 使用 self.db.session() 短 Session（不自行创建 Database）
+        - 记录追溯字段（forecast_model_load, forecast_model_pv, optimizer_name）
         """
-        # ===== 临时禁用写入（验收模式） =====
-        logger.warning("⚠️ 临时禁用 strategy_runs 写入（验收模式）")
-        logger.info(f"策略运行结果: mode={effective_mode}, target={decision.storage_power_target}kW, source={decision.source}")
-        return {"id": 1}
-        # ===================================================
+        try:
+            from app.repositories.strategy_run_repository import StrategyRunRepository
+            from app.models.strategy_run import StrategyRunModel
 
-        # ===== 以下为完整实现（正式版本启用） =====
-        """
-        from app.database import Database
-        from app.config import Settings
-        from app.models.strategy_run import StrategyRunModel
+            # 序列化预测和调度数据
+            load_json = None
+            if load_forecast and load_forecast.points:
+                load_json = json.dumps([
+                    {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                    for p in load_forecast.points
+                ])
 
-        # 创建独立的数据库会话，避免与主事务冲突
-        settings = Settings.from_env()
-        db = Database(settings.database_url)
+            pv_json = None
+            if pv_forecast and pv_forecast.points:
+                pv_json = json.dumps([
+                    {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
+                    for p in pv_forecast.points
+                ])
 
-        max_retries = 3
-        retry_delay = 0.5
+            schedule_json = None
+            if optimization and optimization.schedule:
+                schedule_json = json.dumps([
+                    {
+                        "timestamp": p.timestamp.isoformat(),
+                        "power": p.storage_power_target_kw,
+                        "soc": p.predicted_soc
+                    }
+                    for p in optimization.schedule
+                ])
 
-        for attempt in range(max_retries):
-            try:
-                with db.session() as session:
-                    # 序列化预测数据
-                    load_json = None
-                    if load_forecast and load_forecast.points:
-                        load_json = json.dumps([
-                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                            for p in load_forecast.points
-                        ])
+            # 处理 execution 可能是字典或对象
+            if isinstance(execution, dict):
+                exec_success = execution.get("success", False)
+                exec_message = execution.get("message")
+            else:
+                exec_success = execution.success
+                exec_message = execution.message
 
-                    pv_json = None
-                    if pv_forecast and pv_forecast.points:
-                        pv_json = json.dumps([
-                            {"timestamp": p.timestamp.isoformat(), "value": p.value_kw}
-                            for p in pv_forecast.points
-                        ])
+            # ✅ 使用注入的 self.db，每次写入创建短 Session
+            with self.db.session() as session:
+                repo = StrategyRunRepository(session)
 
-                    schedule_json = None
-                    if optimization and optimization.schedule:
-                        schedule_json = json.dumps([
-                            {
-                                "timestamp": p.timestamp.isoformat(),
-                                "power": p.storage_power_target_kw,
-                                "soc": p.predicted_soc
-                            }
-                            for p in optimization.schedule
-                        ])
+                run_data = {
+                    "created_at": datetime.now(),
+                    "requested_mode": requested_mode,
+                    "effective_mode": effective_mode,
+                    "fallback_used": fallback_used,
+                    "storage_power_target": decision.storage_power_target,
+                    "action": decision.action,
+                    "message": decision.message,
+                    "source": decision.source,
+                    "status": "success" if exec_success else "failed",
+                    # 追溯字段
+                    "forecast_model_load": load_forecast.model_name if load_forecast else None,
+                    "forecast_model_pv": pv_forecast.model_name if pv_forecast else None,
+                    "optimizer_name": optimization.optimizer_name if optimization else None,
+                    "algorithm_message": decision.message if decision else None,
+                    "execution_message": exec_message,
+                    # JSON 字段
+                    "load_forecast_json": load_json,
+                    "pv_forecast_json": pv_json,
+                    "schedule_json": schedule_json,
+                }
 
-                    # 处理 execution 可能是字典或对象
-                    if isinstance(execution, dict):
-                        exec_success = execution.get("success", False)
-                        exec_message = execution.get("message")
-                    else:
-                        exec_success = execution.success
-                        exec_message = execution.message
+                run = repo.create(run_data)
+                logger.info(f"✅ 策略运行记录已保存: id={run.id}")
+                return {"id": run.id}
 
-                    # ===== v1.6: 添加追溯字段 =====
-                    record = StrategyRunModel(
-                        created_at=datetime.now(),
-                        requested_mode=requested_mode,
-                        effective_mode=effective_mode,
-                        fallback_used=fallback_used,
-                        storage_power_target=decision.storage_power_target,
-                        action=decision.action,
-                        message=decision.message,
-                        source=decision.source,
-                        status="success" if exec_success else "failed",
-                        # 追溯字段
-                        forecast_model_load=load_forecast.model_name if load_forecast else None,
-                        forecast_model_pv=pv_forecast.model_name if pv_forecast else None,
-                        optimizer_name=optimization.optimizer_name if optimization else None,
-                        algorithm_message=decision.message if decision else None,
-                        execution_message=exec_message,
-                        # JSON 字段
-                        load_forecast_json=load_json,
-                        pv_forecast_json=pv_json,
-                        schedule_json=schedule_json,
-                    )
-                    session.add(record)
-                    session.commit()
-                    session.refresh(record)
-                    return {"id": record.id}
-
-            except OperationalError as e:
-                if "database is locked" in str(e) and attempt < max_retries - 1:
-                    logger.warning(f"数据库被锁，重试 {attempt + 1}/{max_retries}...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                raise
-            except Exception as e:
-                logger.error(f"保存运行记录失败: {e}")
-                return None
-
-        logger.error(f"保存运行记录失败（已重试 {max_retries} 次）")
-        return None
-        """
+        except Exception as e:
+            logger.error(f"❌ 保存策略运行记录失败: {e}")
+            # 保存失败不应阻塞策略执行，返回 None 表示未记录
+            return None
 
     def get_latest_run(self) -> Optional[Dict]:
         try:
