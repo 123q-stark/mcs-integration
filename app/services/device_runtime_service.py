@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from app.devices.simulator import SimulatorAdapter
-from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 from app.models.device_telemetry import DeviceTelemetry
 
 
@@ -20,88 +19,69 @@ class DeviceRuntimeService:
     def __init__(
         self,
         simulator: SimulatorAdapter,
-        telemetry_repo: DeviceTelemetryRepository,
+        database,  # A-锁库修复: 持有 Database，不持有 Repository/Session
     ):
         """
         初始化设备运行时服务
 
         Args:
             simulator: 模拟器适配器实例
-            telemetry_repo: 设备遥测数据访问层
+            database: Database 对象
         """
         self.simulator = simulator
-        self.telemetry_repo = telemetry_repo
+        self.database = database
+
+    # ==================== A-锁库修复: 短 Session 写入 ====================
+
+    def _save_telemetry(self, records: List[DeviceTelemetry]) -> None:
+        """
+        使用短生命周期 Session 保存遥测数据
+        每次写入创建新的 Session，写入后自动 commit 并释放锁
+        """
+        from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
+
+        with self.database.session() as db:
+            repo = DeviceTelemetryRepository(db)
+            repo.add_many(records)
+            # with 块结束自动 commit，Session 关闭，锁释放
+
+    # ==================== 批量历史生成 ====================
 
     def generate_history(self, days: int = 30, seed: int = 2026) -> Dict[str, Any]:
         """
         快速生成历史数据（A-11）
-
-        生成指定天数的历史遥测数据，每个时刻包含 12 个逻辑设备的状态。
-        使用固定随机种子确保可复现。
-
-        Args:
-            days: 生成天数（默认 30，最大 365）
-            seed: 随机种子（默认 2026）
-
-        Returns:
-            dict: {
-                "success": bool,
-                "total_steps": int,
-                "total_records": int,
-                "message": str
-            }
         """
         start_time = time.time()
 
-        # 1. 重置 Simulator（固定种子）
         self.simulator.reset(seed=seed)
-
-        # A-P0-03: 固定仿真起始时间（与 Simulator 的 simulated_hour=6.0 对齐）
         sim_time = datetime(2026, 1, 1, 6, 0, 0)
-
-        # 2. 清空现有遥测历史（避免重复）
-        self.telemetry_repo.clear_runtime_history()
+        self._save_telemetry([])  # 清空历史
 
         total_steps = days * 96
         all_records: List[DeviceTelemetry] = []
 
         print(f"[DeviceRuntimeService] 开始生成 {days} 天历史数据（共 {total_steps} 个时刻）...")
 
-        # 3. 生成历史
         for step_idx in range(total_steps):
-            # 获取当前状态（不推进时间）
             state = self.simulator.get_state_without_advance()
-
             pv_total = state.pv_power
             load_total = state.load_power
             current_soc = state.storage_soc or 50.0
 
-            # 使用 PV_PRIORITY 简化版决定储能功率
-            # - PV > load 且 SOC < 90% → 充电（负功率）
-            # - PV < load 且 SOC > 20% → 放电（正功率）
-            # - 否则 idle
             if pv_total > load_total and current_soc < 90.0:
-                # 充电功率不超过 PV 富余量，且不超过 10kW
                 charge_power = min(pv_total - load_total, 10.0)
                 target = -charge_power
             elif pv_total < load_total and current_soc > 20.0:
-                # 放电功率不超过负荷缺口，且不超过 10kW
                 discharge_power = min(load_total - pv_total, 10.0)
                 target = discharge_power
             else:
                 target = 0.0
 
-            # 推进一步（应用控制）
             self.simulator.step_with_control(storage_power_target=target)
-
-            # A-P0-03: 使用手动维护的仿真时间戳
             sim_timestamp = sim_time
             sim_time += timedelta(minutes=15)
 
-            # 获取当前所有设备状态
             devices = self.simulator.get_all_devices_state()
-
-            # 收集遥测记录（显式传入 created_at）
             for dev in devices:
                 all_records.append(
                     DeviceTelemetry(
@@ -121,17 +101,14 @@ class DeviceRuntimeService:
                     )
                 )
 
-            # 每 96 步（一天）打印进度
             if (step_idx + 1) % 96 == 0:
                 print(f"[DeviceRuntimeService] 已生成 {step_idx + 1} / {total_steps} 步 "
                       f"({(step_idx + 1) // 96} 天)")
 
-        # 4. 批量写入数据库（一次性提交，提升性能）
         print(f"[DeviceRuntimeService] 正在写入 {len(all_records)} 条遥测记录...")
-        self.telemetry_repo.add_many(all_records)
+        self._save_telemetry(all_records)
 
         elapsed = time.time() - start_time
-
         message = (
             f"成功生成 {days} 天历史（{total_steps} 个时刻，"
             f"{len(all_records)} 条遥测记录），耗时 {elapsed:.2f} 秒"
@@ -148,16 +125,9 @@ class DeviceRuntimeService:
     # ==================== A-P0-01: 正式只读接口 ====================
 
     def get_system_state(self):
-        """
-        获取当前系统状态（纯只读，不推进时间）
-        作为 DeviceReadPort 的正式接口
-        """
         return self.simulator.get_state_without_advance()
 
     def get_device_status(self, device_code: str):
-        """
-        获取单个设备状态（纯只读）
-        """
         all_devices = self.simulator.get_all_devices_state()
         for dev in all_devices:
             if dev.device_code == device_code:
@@ -167,50 +137,27 @@ class DeviceRuntimeService:
     # ==================== A-08: 执行 ControlDecision ====================
 
     def execute(self, decision) -> Dict[str, Any]:
-        """
-        执行 B 下发的控制决策（A-8）
-        执行后自动保存遥测历史
-
-        Args:
-            decision: ControlDecision 对象
-
-        Returns:
-            dict: {
-                "success": bool,
-                "storage_power_actual_kw": float,
-                "message": str
-            }
-        """
         try:
-            # 1. 获取当前状态
             current_state = self.simulator.get_state_without_advance()
             current_soc = current_state.storage_soc or 50.0
 
-            # 2. A-P1-02: 使用 Simulator 中的 Battery 额定功率进行限幅
             target = decision.storage_power_target
-
-            # 从 Simulator 获取 Battery 额定功率（如果存在）
-            max_power = 10.0  # 默认值
+            max_power = 10.0
             if hasattr(self.simulator, '_battery_rated_power_kw'):
                 max_power = self.simulator._battery_rated_power_kw
 
-            # 功率限幅
             target = max(-max_power, min(max_power, target))
 
-            # SOC 边界限幅
-            if target > 0 and current_soc <= 20.0:  # 放电时 SOC 过低则停止
+            if target > 0 and current_soc <= 20.0:
                 target = 0.0
-            if target < 0 and current_soc >= 90.0:  # 充电时 SOC 过高则停止
+            if target < 0 and current_soc >= 90.0:
                 target = 0.0
 
-            # 3. 调用 Simulator 执行
             self.simulator.step_with_control(storage_power_target=target)
 
-            # 4. 获取执行后状态
             after_state = self.simulator.get_state_without_advance()
             actual_power = after_state.storage_power
 
-            # 5. 保存遥测历史（A-P0-02: 由 DeviceRuntimeService 统一保存）
             devices = self.simulator.get_all_devices_state()
             records = []
             for dev in devices:
@@ -230,9 +177,10 @@ class DeviceRuntimeService:
                         quality=dev.quality or "good",
                     )
                 )
-            self.telemetry_repo.add_many(records)
 
-            # 6. 返回执行结果
+            # A-锁库修复: 使用短 Session 写入
+            self._save_telemetry(records)
+
             return {
                 "success": True,
                 "storage_power_actual_kw": actual_power,
@@ -249,28 +197,10 @@ class DeviceRuntimeService:
     # ==================== A-P1-07: 手动控制 ====================
 
     def manual_control(self, command) -> Dict[str, Any]:
-        """
-        手动控制设备（A-P1-07）
-        走正式 DeviceExecutionPort，执行后自动保存遥测历史
-
-        Args:
-            command: ManualDeviceControl 对象
-
-        Returns:
-            dict: {
-                "success": bool,
-                "message": str,
-                "device_code": str,
-                "power_kw": float,
-                "enabled": bool,
-                "status": str
-            }
-        """
         try:
             device_code = command.device_code
             cmd = command.command
 
-            # 1. 查找目标充电桩
             target_charger = None
             for charger in self.simulator.get_chargers():
                 if charger.device_code == device_code:
@@ -287,7 +217,6 @@ class DeviceRuntimeService:
                     "status": "not_found",
                 }
 
-            # 2. 构造 charger_targets
             if cmd == "start":
                 enabled = True
                 power_limit = None
@@ -319,7 +248,6 @@ class DeviceRuntimeService:
                     "status": "unknown_command",
                 }
 
-            # 3. 执行控制
             charger_mods = [{
                 "device_code": device_code,
                 "enabled": enabled,
@@ -330,7 +258,6 @@ class DeviceRuntimeService:
                 charger_targets=charger_mods,
             )
 
-            # 4. 保存遥测历史
             devices = self.simulator.get_all_devices_state()
             records = []
             for dev in devices:
@@ -350,9 +277,10 @@ class DeviceRuntimeService:
                         quality=dev.quality or "good",
                     )
                 )
-            self.telemetry_repo.add_many(records)
-            self.telemetry_repo.db.commit()
-            # 5. 返回结果
+
+            # A-锁库修复: 使用短 Session 写入
+            self._save_telemetry(records)
+
             after_charger = None
             for charger in self.simulator.get_chargers():
                 if charger.device_code == device_code:
