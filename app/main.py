@@ -55,19 +55,18 @@ def create_app(
         app.state.database = database
         app.state.service = service
 
-        # ===== A 公共文件修改：注入 DeviceRuntimeService =====
+        # ===== A-锁库修复: 注入 DeviceRuntimeService（正确版） =====
         from app.services.device_runtime_service import DeviceRuntimeService
-        from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
 
-        with database.session() as db:
-            telemetry_repo = DeviceTelemetryRepository(db)
-            runtime_service = DeviceRuntimeService(device, telemetry_repo)
+        # ✅ 正确：只传入 database，不传入 Repository/Session
+        # 每次 telemetry 写入内部使用短生命周期 Session
+        runtime_service = DeviceRuntimeService(device, database)
 
         app.state.device_runtime_service = runtime_service
         app.state.device_read_port = runtime_service
         app.state.device_execution_port = runtime_service
         app.state.device = device
-        # ======================================================
+        # ===========================================================
 
         # 5. 启动时先执行一次，保证页面第一次访问就有数据
         await service.run_cycle()
