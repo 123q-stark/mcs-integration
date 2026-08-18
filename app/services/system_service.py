@@ -15,7 +15,7 @@ from app.schemas import (
     SystemState,
 )
 from app.strategies.base import EnergyStrategy
-from app.repositories.strategy_repository import StrategyRepository  # 新增
+from app.repositories.strategy_repository import StrategyRepository
 
 
 class EMSService:
@@ -40,18 +40,24 @@ class EMSService:
         self._task: asyncio.Task | None = None
         self._latest_status: StatusResponse | None = None
         self._latest_system_state: SystemState | None = None
+
     async def run_cycle(self) -> StatusResponse:
         async with self._lock:
             state_before = self.device.read_state()
-            
+
             # 从数据库获取策略配置
             with self.database.session() as db:
                 repo = StrategyRepository(db)
                 config = repo.get_active_config()
-            
+
             # 将配置传入策略
             decision = self.strategy.calculate(state_before, config)
-            state_after = self.device.execute_command(decision)
+
+            # ===== A 公共文件修改：使用 step_with_control 替代 execute_command =====
+            state_after = self.device.step_with_control(
+                storage_power_target=decision.storage_power_target
+            )
+
             self._latest_system_state = state_after.model_copy(deep=True)
             status = StatusResponse(
                 pv_power=state_after.pv_power,
@@ -140,15 +146,20 @@ class EMSService:
 
             # 复用一次完整周期，确保重置后页面立即有数据。
             state_before = self.device.read_state()
-            
+
             # 从数据库获取策略配置
             with self.database.session() as db:
                 repo = StrategyRepository(db)
                 config = repo.get_active_config()
-            
+
             # 将配置传入策略
             decision = self.strategy.calculate(state_before, config)
-            state_after = self.device.execute_command(decision)
+
+            # ===== A 公共文件修改：使用 step_with_control 替代 execute_command =====
+            state_after = self.device.step_with_control(
+                storage_power_target=decision.storage_power_target
+            )
+
             self._latest_system_state = state_after.model_copy(deep=True)
             status = StatusResponse(
                 pv_power=state_after.pv_power,
@@ -182,7 +193,6 @@ class EMSService:
 
             self._latest_status = status
             return status
-# 在 reset 方法的最后（return status 之后），添加：
 
     def get_system_state(self) -> SystemState:
         """获取最新的系统状态（深拷贝，不影响内部状态）"""

@@ -18,10 +18,17 @@ class StrategyRunModel(Base):
     storage_power_target = Column(Float, nullable=False)
     action = Column(String(20), nullable=False)
     message = Column(Text, nullable=True)
-    source = Column(String(20), nullable=False)  # 'milp' or 'fixed_rule'
-    status = Column(String(20), nullable=False)  # 'success' or 'failed'
+    source = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
 
-    # JSON 字段存储预测和调度数据
+    # ===== v1.6 追溯字段 =====
+    forecast_model_load = Column(String(50), nullable=True)
+    forecast_model_pv = Column(String(50), nullable=True)
+    optimizer_name = Column(String(50), nullable=True)
+    algorithm_message = Column(Text, nullable=True)
+    execution_message = Column(Text, nullable=True)
+
+    # JSON 字段
     load_forecast_json = Column(Text, nullable=True)
     pv_forecast_json = Column(Text, nullable=True)
     schedule_json = Column(Text, nullable=True)

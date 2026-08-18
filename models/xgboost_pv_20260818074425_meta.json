@@ -1,0 +1,14 @@
+{
+  "target": "pv",
+  "feature_names": [
+    "hour",
+    "minute_slot",
+    "sin_time",
+    "cos_time",
+    "lag_96",
+    "rolling_mean_96"
+  ],
+  "trained_at": "2026-08-18T07:44:25.941535",
+  "history_start": "2026-01-01T06:00:00",
+  "history_end": "2026-08-18T15:42:20.280088"
+}

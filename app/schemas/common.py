@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,6 +55,14 @@ class ControlExecutionResult(BaseModel):
     charger_results: List[dict] = []
     message: str
     executed_at: datetime
+
+
+# ===== A 公共文件修改：新增 ManualDeviceControl =====
+class ManualDeviceControl(BaseModel):
+    """手动设备控制命令（03 冻结契约）"""
+    device_code: str
+    command: Literal["start", "stop", "set_power"]
+    target_power_kw: Optional[float] = None
 
 
 class StatusResponse(BaseModel):

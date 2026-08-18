@@ -55,9 +55,18 @@ def create_app(
         app.state.database = database
         app.state.service = service
 
-        # 4. B-09: 将设备端口暴露给 API 使用
-        app.state.device_read_port = device
-        app.state.device_execution_port = device
+        # ===== A-锁库修复: 注入 DeviceRuntimeService（正确版） =====
+        from app.services.device_runtime_service import DeviceRuntimeService
+
+        # ✅ 正确：只传入 database，不传入 Repository/Session
+        # 每次 telemetry 写入内部使用短生命周期 Session
+        runtime_service = DeviceRuntimeService(device, database)
+
+        app.state.device_runtime_service = runtime_service
+        app.state.device_read_port = runtime_service
+        app.state.device_execution_port = runtime_service
+        app.state.device = device
+        # ===========================================================
 
         # 5. 启动时先执行一次，保证页面第一次访问就有数据
         await service.run_cycle()

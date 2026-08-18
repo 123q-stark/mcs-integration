@@ -326,6 +326,9 @@
     <!-- Toast 通知 -->
     <div id="toast" class="toast"></div>
 
+    <!-- ===== 新增：配置加载状态显示（解决 JS 报错） ===== -->
+    <div id="config-status" style="margin: 10px 0; font-weight: bold; padding: 8px; background: #f0f0f0; border-radius: 4px;"></div>
+
     <!-- 配置网格 -->
     <div class="config-grid">
 
@@ -368,40 +371,40 @@
                 <tbody id="pv-config-table">
                     <tr>
                         <td>PV001</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" disabled></td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" </td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
                     </tr>
                     <tr>
                         <td>PV002</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" disabled></td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" </td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
                     </tr>
                     <tr>
                         <td>PV003</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" disabled></td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" </td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
                     </tr>
                     <tr>
                         <td>PV004</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" disabled></td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" </td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
                     </tr>
                     <tr>
                         <td>PV005</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" disabled></td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" </td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
                     </tr>
                 </tbody>
             </table>
             <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 PV 仅展示配置，不执行自动弃光</p>
         </div>
 
-        <!-- ===== 区域 ③：5 个 Charger 策略配置 ===== -->
+        <!-- ===== 区域 ③：5 个 Charger 策略配置（已移除优先级 disabled） ===== -->
         <div class="config-section">
             <h3>③ 5 个充电桩策略配置</h3>
             <table class="device-table">
@@ -417,42 +420,45 @@
                 <tbody id="charger-config-table">
                     <tr>
                         <td>CHG001</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
+                        <!-- 优先级输入框移除 disabled，使其可编辑 -->
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" id="priority-chg001"></td>
                     </tr>
                     <tr>
                         <td>CHG002</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
-                        <td><input type="number" value="2" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
+                        <td><input type="number" value="2" min="1" max="5" style="width:50px;" id="priority-chg002"></td>
                     </tr>
                     <tr>
                         <td>CHG003</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
-                        <td><input type="number" value="3" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
+                        <td><input type="number" value="3" min="1" max="5" style="width:50px;" id="priority-chg003"></td>
                     </tr>
                     <tr>
                         <td>CHG004</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
-                        <td><input type="number" value="4" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
+                        <td><input type="number" value="4" min="1" max="5" style="width:50px;" id="priority-chg004"></td>
                     </tr>
                     <tr>
                         <td>CHG005</td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="checkbox" checked disabled></td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;" disabled> kW</td>
-                        <td><input type="number" value="5" min="1" max="5" style="width:50px;" disabled></td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="checkbox" checked </td>
+                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
+                        <td><input type="number" value="5" min="1" max="5" style="width:50px;" id="priority-chg005"></td>
                     </tr>
                 </tbody>
             </table>
             <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 Charger 配置已预留，自动优化暂不执行</p>
+            <!-- 为 Charger 添加一个保存按钮（临时方案） -->
+            <button class="btn btn-warning" onclick="saveChargerConfigs()" style="margin-top:8px;">💾 保存 Charger 配置</button>
         </div>
 
         <!-- ===== 区域 ④：Battery 策略配置 ===== -->
@@ -714,7 +720,40 @@
         .catch(() => showToast('保存失败', 'error'));
     }
 
-    // ============ 运行策略（v1.4 自动刷新预测和调度） ============
+    // ============ Charger 配置保存（新增） ============
+    function saveChargerConfigs() {
+        const chargerConfigs = [];
+        const devices = ['CHG001', 'CHG002', 'CHG003', 'CHG004', 'CHG005'];
+        devices.forEach((dev, index) => {
+            const priorityInput = document.getElementById(`priority-${dev.toLowerCase()}`);
+            if (priorityInput) {
+                chargerConfigs.push({
+                    device_code: dev,
+                    priority: parseInt(priorityInput.value, 10)
+                });
+            }
+        });
+        // 逐个保存
+        const promises = chargerConfigs.map(cfg =>
+            fetch(`/api/strategies/device-configs/${cfg.device_code}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ priority: cfg.priority })
+            })
+        );
+        Promise.all(promises)
+            .then(responses => {
+                const allOk = responses.every(r => r.ok);
+                if (allOk) {
+                    showToast('Charger 配置已全部保存');
+                } else {
+                    showToast('部分保存失败', 'error');
+                }
+            })
+            .catch(() => showToast('保存失败', 'error'));
+    }
+
+    // ============ 运行策略 ============
     function runStrategy() {
         const btn = event.target;
         btn.disabled = true;
@@ -722,11 +761,9 @@
         fetch('/api/strategies/run', {method: 'POST'})
         .then(res => res.json())
         .then(data => {
-            // 更新策略结果口
-            document.getElementById('result-storage-target').textContent = data.storage_power_target + ' kW';
-            document.getElementById('result-message').textContent = data.message;
+            document.getElementById('result-storage-target').textContent = (data.storage_power_target || 0) + ' kW';
+            document.getElementById('result-message').textContent = data.message || '执行完成';
             document.getElementById('result-last-run').textContent = new Date().toLocaleString();
-            // 更新算法和模式信息（如果有）
             if (data.decision && data.decision.source) {
                 document.getElementById('result-algorithm').textContent = data.decision.source;
             }
@@ -737,7 +774,6 @@
                 document.getElementById('result-fallback').textContent = data.fallback_used ? '是' : '否';
             }
             showToast('策略运行完成');
-            // v1.4: 自动刷新调度计划和预测图表
             setTimeout(fetchSchedule, 500);
             setTimeout(fetchForecast, 600);
         })
@@ -757,7 +793,7 @@
             document.getElementById('result-requested-mode').textContent = data.requested_mode || 'AUTO';
             document.getElementById('result-effective-mode').textContent = data.effective_mode || 'AUTO';
             document.getElementById('result-fallback').textContent = data.fallback ? '是' : '否';
-            document.getElementById('result-storage-target').textContent = data.storage_power_target + ' kW';
+            document.getElementById('result-storage-target').textContent = (data.storage_power_target || 0) + ' kW';
             document.getElementById('result-message').textContent = data.message || '-';
             if (data.executed_at) {
                 document.getElementById('result-last-run').textContent = new Date(data.executed_at).toLocaleString();
@@ -935,7 +971,6 @@
 
     // ============ 加载默认配置 ============
     function loadDefaultConfigs() {
-        // 加载电价
         fetch('/api/strategies/price-config')
         .then(res => res.json())
         .then(data => {
@@ -945,7 +980,6 @@
         })
         .catch(() => {});
 
-        // 加载 Grid
         fetch('/api/strategies/grid-config')
         .then(res => res.json())
         .then(data => {
@@ -955,7 +989,6 @@
         })
         .catch(() => {});
 
-        // 加载策略配置
         fetch('/api/strategies/config')
         .then(res => res.json())
         .then(data => {
@@ -968,6 +1001,20 @@
             document.getElementById('effective-mode-display').textContent = data.requested_mode || 'AUTO';
         })
         .catch(() => {});
+
+        // 加载 Charger 配置并填充到输入框
+        const devices = ['CHG001', 'CHG002', 'CHG003', 'CHG004', 'CHG005'];
+        devices.forEach(dev => {
+            fetch(`/api/strategies/device-configs/${dev}`)
+            .then(res => res.json())
+            .then(data => {
+                const priorityInput = document.getElementById(`priority-${dev.toLowerCase()}`);
+                if (priorityInput && data.priority !== undefined) {
+                    priorityInput.value = data.priority;
+                }
+            })
+            .catch(() => {});
+        });
     }
 
     // 页面加载完成后加载配置、预测和调度
