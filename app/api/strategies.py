@@ -257,10 +257,36 @@ async def run_strategy(request: Request):
 
 @router.get("/runtime")
 async def get_runtime_status(request: Request):
+    """获取最新的策略运行状态（从数据库读取）"""
     database = request.app.state.database
-    runtime = StrategyRuntimeService(database)
-    status = runtime.get_current_status()
-    return status
+    with database.session() as db:
+        from app.models.strategy_run import StrategyRunModel
+        from app.repositories.strategy_repository import StrategyRepository
+
+        # 获取当前策略配置（包含 requested_mode）
+        repo = StrategyRepository(db)
+        config = repo.get_active_config()
+
+        # 获取最新的一条运行记录
+        latest_run = db.query(StrategyRunModel).order_by(
+            StrategyRunModel.created_at.desc()
+        ).first()
+
+        requested_mode = config.requested_mode if config else None
+        effective_mode = latest_run.effective_mode if latest_run else requested_mode
+        fallback_used = latest_run.fallback_used if latest_run else False
+        last_run_at = latest_run.created_at if latest_run else None
+
+        return {
+            "requested_mode": requested_mode,
+            "effective_mode": effective_mode,
+            "fallback_used": fallback_used,
+            "last_run_at": last_run_at.isoformat() if last_run_at else None,
+            "has_state": latest_run is not None,
+            "has_decision": latest_run is not None,
+            "has_execution": latest_run is not None,
+            "decision": None,
+        }
 
 
 # ============ 预测数据 API（v1.3） ============

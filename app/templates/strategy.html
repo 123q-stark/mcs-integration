@@ -336,8 +336,8 @@
         <div class="config-section">
             <h3>① 运行模式</h3>
             <div class="form-group">
-                <label for="requested-mode">请求模式 (requested_mode)</label>
-                <select id="requested-mode">
+                <label for="requested_mode">请求模式 (requested_mode)</label>
+                <select id="requested_mode">
                     <option value="AUTO">AUTO（自动）</option>
                     <option value="PV_PRIORITY">PV_PRIORITY（光伏优先）</option>
                     <option value="ECONOMIC_SCHEDULE">ECONOMIC_SCHEDULE（经济调度）</option>
@@ -371,40 +371,40 @@
                 <tbody id="pv-config-table">
                     <tr>
                         <td>PV001</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" </td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
+                        <td><input type="checkbox" checked></td>
+                        <td><input type="checkbox"></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>PV002</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" </td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
+                        <td><input type="checkbox" checked></td>
+                        <td><input type="checkbox"></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>PV003</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" </td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
+                        <td><input type="checkbox" checked></td>
+                        <td><input type="checkbox"></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>PV004</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" </td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
+                        <td><input type="checkbox" checked></td>
+                        <td><input type="checkbox"></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>PV005</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" </td>
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" </td>
+                        <td><input type="checkbox" checked></td>
+                        <td><input type="checkbox"></td>
+                        <td><input type="number" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                 </tbody>
             </table>
             <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 PV 仅展示配置，不执行自动弃光</p>
         </div>
 
-        <!-- ===== 区域 ③：5 个 Charger 策略配置（已移除优先级 disabled） ===== -->
+        <!-- ===== 区域 ③：5 个 Charger 策略配置（修复版：所有字段可保存） ===== -->
         <div class="config-section">
             <h3>③ 5 个充电桩策略配置</h3>
             <table class="device-table">
@@ -420,73 +420,71 @@
                 <tbody id="charger-config-table">
                     <tr>
                         <td>CHG001</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
-                        <!-- 优先级输入框移除 disabled，使其可编辑 -->
-                        <td><input type="number" value="1" min="1" max="5" style="width:50px;" id="priority-chg001"></td>
+                        <td><input type="checkbox" id="chg001-participate" checked></td>
+                        <td><input type="checkbox" id="chg001-allow-control" checked></td>
+                        <td><input type="number" id="chg001-power-limit" value="50" min="0" max="200" style="width:60px;"></td>
+                        <td><input type="number" id="chg001-priority" value="1" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>CHG002</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
-                        <td><input type="number" value="2" min="1" max="5" style="width:50px;" id="priority-chg002"></td>
+                        <td><input type="checkbox" id="chg002-participate" checked></td>
+                        <td><input type="checkbox" id="chg002-allow-control" checked></td>
+                        <td><input type="number" id="chg002-power-limit" value="50" min="0" max="200" style="width:60px;"></td>
+                        <td><input type="number" id="chg002-priority" value="2" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>CHG003</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
-                        <td><input type="number" value="3" min="1" max="5" style="width:50px;" id="priority-chg003"></td>
+                        <td><input type="checkbox" id="chg003-participate" checked></td>
+                        <td><input type="checkbox" id="chg003-allow-control" checked></td>
+                        <td><input type="number" id="chg003-power-limit" value="50" min="0" max="200" style="width:60px;"></td>
+                        <td><input type="number" id="chg003-priority" value="3" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>CHG004</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
-                        <td><input type="number" value="4" min="1" max="5" style="width:50px;" id="priority-chg004"></td>
+                        <td><input type="checkbox" id="chg004-participate" checked></td>
+                        <td><input type="checkbox" id="chg004-allow-control" checked></td>
+                        <td><input type="number" id="chg004-power-limit" value="50" min="0" max="200" style="width:60px;"></td>
+                        <td><input type="number" id="chg004-priority" value="4" min="1" max="5" style="width:50px;"></td>
                     </tr>
                     <tr>
                         <td>CHG005</td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="checkbox" checked </td>
-                        <td><input type="number" value="50" min="0" max="200" style="width:60px;"  kW</td>
-                        <td><input type="number" value="5" min="1" max="5" style="width:50px;" id="priority-chg005"></td>
+                        <td><input type="checkbox" id="chg005-participate" checked></td>
+                        <td><input type="checkbox" id="chg005-allow-control" checked></td>
+                        <td><input type="number" id="chg005-power-limit" value="50" min="0" max="200" style="width:60px;"></td>
+                        <td><input type="number" id="chg005-priority" value="5" min="1" max="5" style="width:50px;"></td>
                     </tr>
                 </tbody>
             </table>
             <p style="color:#6b7280;font-size:13px;margin-top:8px;">当前阶段 Charger 配置已预留，自动优化暂不执行</p>
-            <!-- 为 Charger 添加一个保存按钮（临时方案） -->
             <button class="btn btn-warning" onclick="saveChargerConfigs()" style="margin-top:8px;">💾 保存 Charger 配置</button>
         </div>
 
-        <!-- ===== 区域 ④：Battery 策略配置 ===== -->
+        <!-- ===== 区域 ④：Battery 策略配置（修复版：ID 与契约字段名一致） ===== -->
         <div class="config-section">
             <h3>④ Battery 策略配置</h3>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="batt-soc-min">SOC 下限 (%)</label>
-                    <input type="number" id="batt-soc-min" value="20" min="0" max="100" step="1">
+                    <label for="soc_min">SOC 下限 (%)</label>
+                    <input type="number" id="soc_min" value="20" min="0" max="100" step="1">
                 </div>
                 <div class="form-group">
-                    <label for="batt-soc-max">SOC 上限 (%)</label>
-                    <input type="number" id="batt-soc-max" value="90" min="0" max="100" step="1">
+                    <label for="soc_max">SOC 上限 (%)</label>
+                    <input type="number" id="soc_max" value="90" min="0" max="100" step="1">
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="batt-charge-power">最大充电功率 (kW)</label>
-                    <input type="number" id="batt-charge-power" value="10" min="0" max="50" step="0.5">
+                    <label for="charge_power_kw">最大充电功率 (kW)</label>
+                    <input type="number" id="charge_power_kw" value="10" min="0" max="50" step="0.5">
                 </div>
                 <div class="form-group">
-                    <label for="batt-discharge-power">最大放电功率 (kW)</label>
-                    <input type="number" id="batt-discharge-power" value="10" min="0" max="50" step="0.5">
+                    <label for="discharge_power_kw">最大放电功率 (kW)</label>
+                    <input type="number" id="discharge_power_kw" value="10" min="0" max="50" step="0.5">
                 </div>
             </div>
             <div class="form-group">
-                <label for="batt-backup-soc">备用 SOC 目标 (%)</label>
-                <input type="number" id="batt-backup-soc" value="50" min="0" max="100" step="1">
+                <label for="backup_soc_target">备用 SOC 目标 (%)</label>
+                <input type="number" id="backup_soc_target" value="50" min="0" max="100" step="1">
             </div>
             <button class="btn btn-warning" onclick="saveBatteryConfig()">💾 保存 Battery 配置</button>
         </div>
@@ -650,7 +648,7 @@
 
     // ============ 模式保存 ============
     function saveMode() {
-        const mode = document.getElementById('requested-mode').value;
+        const mode = document.getElementById('requested_mode').value;
         fetch('/api/strategies/mode', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
@@ -664,26 +662,36 @@
         .catch(() => showToast('保存失败', 'error'));
     }
 
-    // ============ Battery 配置保存 ============
+    // ============ Battery 配置保存（修复版：使用契约字段名 ID） ============
     function saveBatteryConfig() {
         const data = {
-            soc_min: parseFloat(document.getElementById('batt-soc-min').value),
-            soc_max: parseFloat(document.getElementById('batt-soc-max').value),
-            charge_power_kw: parseFloat(document.getElementById('batt-charge-power').value),
-            discharge_power_kw: parseFloat(document.getElementById('batt-discharge-power').value),
-            backup_soc_target: parseFloat(document.getElementById('batt-backup-soc').value)
+            config_name: 'default',
+            requested_mode: document.getElementById('requested_mode').value,
+            soc_min: parseFloat(document.getElementById('soc_min').value),
+            soc_max: parseFloat(document.getElementById('soc_max').value),
+            charge_power_kw: parseFloat(document.getElementById('charge_power_kw').value),
+            discharge_power_kw: parseFloat(document.getElementById('discharge_power_kw').value),
+            backup_soc_target: parseFloat(document.getElementById('backup_soc_target').value)
         };
         fetch('/api/strategies/config', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                config_name: 'default',
-                ...data
-            })
+            body: JSON.stringify(data)
         })
-        .then(res => res.json())
-        .then(() => showToast('Battery 配置已保存'))
-        .catch(() => showToast('保存失败', 'error'));
+        .then(res => {
+            if (!res.ok) {
+                return res.json().then(err => Promise.reject(err));
+            }
+            return res.json();
+        })
+        .then(() => {
+            showToast('Battery 配置已保存');
+            // ✅ 不重新加载，保持当前输入框的值
+        })
+        .catch(err => {
+            console.error('保存失败:', err);
+            showToast('保存失败: ' + (err.detail || '未知错误'), 'error');
+        });
     }
 
     // ============ Grid 配置保存 ============
@@ -716,36 +724,37 @@
             body: JSON.stringify(data)
         })
         .then(res => res.json())
-        .then(() => showToast('电价配置已保存'))
+        .then(() => {
+            showToast('电价配置已保存');
+            // 保存后立即更新当前价格显示
+            updateCurrentPriceDisplay(data.valley_price, data.flat_price, data.peak_price);
+        })
         .catch(() => showToast('保存失败', 'error'));
     }
 
-    // ============ Charger 配置保存（新增） ============
+    // ============ Charger 配置保存（修复版：保存所有字段） ============
     function saveChargerConfigs() {
-        const chargerConfigs = [];
         const devices = ['CHG001', 'CHG002', 'CHG003', 'CHG004', 'CHG005'];
-        devices.forEach((dev, index) => {
-            const priorityInput = document.getElementById(`priority-${dev.toLowerCase()}`);
-            if (priorityInput) {
-                chargerConfigs.push({
-                    device_code: dev,
-                    priority: parseInt(priorityInput.value, 10)
-                });
-            }
-        });
-        // 逐个保存
-        const promises = chargerConfigs.map(cfg =>
-            fetch(`/api/strategies/device-configs/${cfg.device_code}`, {
+        const promises = devices.map(dev => {
+            const code = dev.toLowerCase();
+            const data = {
+                participate_in_strategy: document.getElementById(`${code}-participate`).checked,
+                allow_strategy_control: document.getElementById(`${code}-allow-control`).checked,
+                strategy_power_limit_kw: parseFloat(document.getElementById(`${code}-power-limit`).value) || 50,
+                priority: parseInt(document.getElementById(`${code}-priority`).value, 10) || 1,
+            };
+            return fetch(`/api/strategies/device-configs/${dev}`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ priority: cfg.priority })
-            })
-        );
+                body: JSON.stringify(data)
+            });
+        });
+
         Promise.all(promises)
             .then(responses => {
                 const allOk = responses.every(r => r.ok);
                 if (allOk) {
-                    showToast('Charger 配置已全部保存');
+                    showToast('所有 Charger 配置已保存');
                 } else {
                     showToast('部分保存失败', 'error');
                 }
@@ -969,17 +978,40 @@
         }
     }
 
+    // ============ 当前时段价格更新 ============
+    function updateCurrentPriceDisplay(valley, flat, peak) {
+        const hour = new Date().getHours();
+        let price = flat || 0.55;
+        let period = '平段';
+
+        if (hour >= 0 && hour < 7 || hour >= 23 && hour < 24) {
+            price = valley || 0.35;
+            period = '谷段';
+        } else if (hour >= 10 && hour < 15 || hour >= 18 && hour < 21) {
+            price = peak || 0.85;
+            period = '峰段';
+        } else {
+            price = flat || 0.55;
+            period = '平段';
+        }
+
+        document.getElementById('current-price-display').textContent = price.toFixed(2) + ' CNY/kWh (' + period + ')';
+    }
+
     // ============ 加载默认配置 ============
     function loadDefaultConfigs() {
+        // 加载电价配置
         fetch('/api/strategies/price-config')
         .then(res => res.json())
         .then(data => {
             document.getElementById('price-valley').value = data.valley_price;
             document.getElementById('price-flat').value = data.flat_price;
             document.getElementById('price-peak').value = data.peak_price;
+            updateCurrentPriceDisplay(data.valley_price, data.flat_price, data.peak_price);
         })
         .catch(() => {});
 
+        // 加载电网配置
         fetch('/api/strategies/grid-config')
         .then(res => res.json())
         .then(data => {
@@ -989,29 +1021,31 @@
         })
         .catch(() => {});
 
+        // ===== 修复：加载策略配置（使用契约字段名 ID） =====
         fetch('/api/strategies/config')
         .then(res => res.json())
         .then(data => {
-            document.getElementById('batt-soc-min').value = data.soc_min;
-            document.getElementById('batt-soc-max').value = data.soc_max;
-            document.getElementById('batt-charge-power').value = data.charge_power_kw;
-            document.getElementById('batt-discharge-power').value = data.discharge_power_kw;
-            document.getElementById('batt-backup-soc').value = data.backup_soc_target || 50;
-            document.getElementById('requested-mode').value = data.requested_mode || 'AUTO';
+            document.getElementById('soc_min').value = data.soc_min;
+            document.getElementById('soc_max').value = data.soc_max;
+            document.getElementById('charge_power_kw').value = data.charge_power_kw;
+            document.getElementById('discharge_power_kw').value = data.discharge_power_kw;
+            document.getElementById('backup_soc_target').value = data.backup_soc_target || 50;
+            document.getElementById('requested_mode').value = data.requested_mode || 'AUTO';
             document.getElementById('effective-mode-display').textContent = data.requested_mode || 'AUTO';
         })
         .catch(() => {});
 
-        // 加载 Charger 配置并填充到输入框
+        // ===== 修复：加载 Charger 配置并填充到输入框（所有字段） =====
         const devices = ['CHG001', 'CHG002', 'CHG003', 'CHG004', 'CHG005'];
         devices.forEach(dev => {
             fetch(`/api/strategies/device-configs/${dev}`)
             .then(res => res.json())
             .then(data => {
-                const priorityInput = document.getElementById(`priority-${dev.toLowerCase()}`);
-                if (priorityInput && data.priority !== undefined) {
-                    priorityInput.value = data.priority;
-                }
+                const code = dev.toLowerCase();
+                document.getElementById(`${code}-participate`).checked = data.participate_in_strategy !== undefined ? data.participate_in_strategy : true;
+                document.getElementById(`${code}-allow-control`).checked = data.allow_strategy_control !== undefined ? data.allow_strategy_control : true;
+                document.getElementById(`${code}-power-limit`).value = data.strategy_power_limit_kw !== undefined ? data.strategy_power_limit_kw : 50;
+                document.getElementById(`${code}-priority`).value = data.priority !== undefined ? data.priority : 1;
             })
             .catch(() => {});
         });
@@ -1026,5 +1060,5 @@
 </script>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/strategy.js"></script>
+<!-- <script src="/static/js/strategy.js"></script> -->
 {% endblock %}

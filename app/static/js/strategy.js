@@ -88,21 +88,27 @@ async function saveConfig(configData) {
     }
 }
 
+// ============ A-P1-06 修复：使用契约字段名作为 ID ============
 function fillFormData(config) {
     document.getElementById('config-name').value = config.config_name || '';
-    document.getElementById('soc-min').value = config.soc_min || '';
-    document.getElementById('soc-max').value = config.soc_max || '';
-    document.getElementById('charge-power').value = config.charge_power_kw || '';
-    document.getElementById('discharge-power').value = config.discharge_power_kw || '';
+    document.getElementById('soc_min').value = config.soc_min || '';
+    document.getElementById('soc_max').value = config.soc_max || '';
+    document.getElementById('charge_power_kw').value = config.charge_power_kw || '';
+    document.getElementById('discharge_power_kw').value = config.discharge_power_kw || '';
+    document.getElementById('backup_soc_target').value = config.backup_soc_target || 50;
+    document.getElementById('requested_mode').value = config.requested_mode || 'AUTO';
 }
 
+// ============ A-P1-06 修复：添加 requested_mode 和 backup_soc_target ============
 function getFormData() {
     return {
         config_name: document.getElementById('config-name').value.trim(),
-        soc_min: parseFloat(document.getElementById('soc-min').value),
-        soc_max: parseFloat(document.getElementById('soc-max').value),
-        charge_power_kw: parseFloat(document.getElementById('charge-power').value),
-        discharge_power_kw: parseFloat(document.getElementById('discharge-power').value),
+        requested_mode: document.getElementById('requested_mode').value,
+        soc_min: parseFloat(document.getElementById('soc_min').value),
+        soc_max: parseFloat(document.getElementById('soc_max').value),
+        charge_power_kw: parseFloat(document.getElementById('charge_power_kw').value),
+        discharge_power_kw: parseFloat(document.getElementById('discharge_power_kw').value),
+        backup_soc_target: parseFloat(document.getElementById('backup_soc_target').value) || 50,
     };
 }
 
@@ -152,7 +158,6 @@ function displayPreviewResult(result) {
     const messageEl = document.getElementById('preview-message');
     const timeEl = document.getElementById('preview-time');
 
-    // 动作标签样式
     const actionMap = {
         'charge': { label: '🔋 充电', class: 'charge' },
         'discharge': { label: '⚡ 放电', class: 'discharge' },
@@ -184,18 +189,15 @@ function getPreviewData() {
 // ============ 页面初始化 ============
 
 document.addEventListener('DOMContentLoaded', async function() {
-    // 加载当前配置
     const config = await loadCurrentConfig();
     if (config) {
         fillFormData(config);
     }
 
-    // 保存配置
     document.getElementById('strategy-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         try {
             const data = getFormData();
-            // 基本校验
             if (!data.config_name) {
                 showToast('请输入配置名称', 'error');
                 return;
@@ -222,7 +224,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // 加载当前配置按钮
     document.getElementById('load-btn').addEventListener('click', async function() {
         const config = await loadCurrentConfig();
         if (config) {
@@ -233,7 +234,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // 预览决策
     document.getElementById('preview-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         try {
@@ -248,7 +248,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     });
 
-    // 自动预览（初始加载时）
     setTimeout(async function() {
         try {
             const data = getPreviewData();
