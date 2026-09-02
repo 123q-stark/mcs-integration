@@ -841,7 +841,7 @@
         });
     });
 
-    // ============ v1.3 预测曲线 ============
+    // ============ v1.3 预测曲线（P1-05 修复：检查 available） ============
     let loadChart = null;
     let pvChart = null;
 
@@ -852,12 +852,25 @@
             const pvRes = await fetch('/api/strategies/forecast/pv');
             const pvData = await pvRes.json();
 
+            // P1-05: 检查 available 状态
+            if (!loadData.available) {
+                document.getElementById('forecastTime').textContent = '⚠️ ' + (loadData.message || '负荷预测不可用');
+                // 清空图表
+                if (loadChart) { loadChart.destroy(); loadChart = null; }
+                return;
+            }
+            if (!pvData.available) {
+                document.getElementById('forecastTime').textContent = '⚠️ ' + (pvData.message || 'PV预测不可用');
+                if (pvChart) { pvChart.destroy(); pvChart = null; }
+                return;
+            }
+
             const labels = loadData.points.map(p => {
                 const dt = new Date(p.timestamp);
                 return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
             });
-            const loadValues = loadData.points.map(p => p.value_kw);
-            const pvValues = pvData.points.map(p => p.value_kw);
+            const loadValues = loadData.points.map(p => p.value !== undefined ? p.value : p.value_kw);
+            const pvValues = pvData.points.map(p => p.value !== undefined ? p.value : p.value_kw);
 
             updateChart('loadForecastChart', '负荷预测 (kW)', labels, loadValues, loadChart, '#4f8cf7');
             updateChart('pvForecastChart', 'PV 预测 (kW)', labels, pvValues, pvChart, '#f59e0b');
@@ -868,6 +881,13 @@
         }
     }
 
+    // =============================================================
+    // ✅ 方案一：极简清爽风格
+    // - 隐藏数据点（hover 时显示）
+    // - 白色卡片风格 tooltip
+    // - 淡化网格线
+    // - 线条稍粗
+    // =============================================================
     function updateChart(canvasId, label, labels, values, chartInstance, color) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
@@ -883,21 +903,51 @@
                     label: label,
                     data: values,
                     borderColor: color,
-                    backgroundColor: color + '33',
+                    backgroundColor: color + '15',
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 1
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    borderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        titleColor: '#1a2332',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y.toFixed(2) + ' kW';
+                            }
+                        }
+                    }
                 },
                 scales: {
-                    x: { ticks: { maxTicksLimit: 24, autoSkip: true } },
-                    y: { beginAtZero: true }
+                    x: {
+                        ticks: { maxTicksLimit: 24, autoSkip: true, color: '#9ca3af' },
+                        grid: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { color: '#9ca3af' }
+                    }
                 }
             }
         });
@@ -908,7 +958,7 @@
         }
     }
 
-    // ============ v1.4 调度计划 ============
+    // ============ v1.4 调度计划（P1-05 修复：检查 available） ============
     let schedulePowerChart = null;
     let scheduleSocChart = null;
 
@@ -917,27 +967,39 @@
             const response = await fetch('/api/strategies/schedule');
             const data = await response.json();
 
-            if (data.schedule && data.schedule.length > 0) {
-                const labels = data.schedule.map(item => {
-                    const dt = new Date(item.timestamp);
-                    return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                });
-                const powerValues = data.schedule.map(item => item.power);
-                const socValues = data.schedule.map(item => item.soc);
-
-                updateScheduleChart('schedulePowerChart', '储能功率 (kW)', labels, powerValues, schedulePowerChart, '#10b981', '#10b98133');
-                updateScheduleChart('scheduleSocChart', 'SOC (%)', labels, socValues, scheduleSocChart, '#6366f1', '#6366f133');
-
-                document.getElementById('scheduleTime').textContent = '更新于: ' + new Date(data.created_at).toLocaleString();
-            } else {
-                document.getElementById('scheduleTime').textContent = '暂无调度数据';
+            // P1-05: 检查 available 状态
+            if (!data.available || !data.schedule || data.schedule.length === 0) {
+                document.getElementById('scheduleTime').textContent = '⚠️ ' + (data.message || '暂无调度数据');
+                // 清空图表
+                if (schedulePowerChart) { schedulePowerChart.destroy(); schedulePowerChart = null; }
+                if (scheduleSocChart) { scheduleSocChart.destroy(); scheduleSocChart = null; }
+                return;
             }
+
+            const labels = data.schedule.map(item => {
+                const dt = new Date(item.timestamp);
+                return dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            });
+            const powerValues = data.schedule.map(item => item.power);
+            const socValues = data.schedule.map(item => item.soc);
+
+            updateScheduleChart('schedulePowerChart', '储能功率 (kW)', labels, powerValues, schedulePowerChart, '#10b981', '#10b98133');
+            updateScheduleChart('scheduleSocChart', 'SOC (%)', labels, socValues, scheduleSocChart, '#6366f1', '#6366f133');
+
+            document.getElementById('scheduleTime').textContent = '更新于: ' + new Date(data.created_at).toLocaleString();
         } catch (error) {
             console.error('获取调度计划失败:', error);
             document.getElementById('scheduleTime').textContent = '加载失败';
         }
     }
 
+    // =============================================================
+    // ✅ 方案一：极简清爽风格（调度计划版）
+    // - 隐藏数据点（hover 时显示）
+    // - 白色卡片风格 tooltip
+    // - 淡化网格线
+    // - 线条稍粗
+    // =============================================================
     function updateScheduleChart(canvasId, label, labels, values, chartInstance, color, fillColor) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
@@ -953,21 +1015,52 @@
                     label: label,
                     data: values,
                     borderColor: color,
-                    backgroundColor: fillColor || color + '33',
+                    backgroundColor: fillColor || color + '15',
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 1
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    borderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        titleColor: '#1a2332',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                const unit = label.includes('SOC') ? ' %' : ' kW';
+                                return context.parsed.y.toFixed(2) + unit;
+                            }
+                        }
+                    }
                 },
                 scales: {
-                    x: { ticks: { maxTicksLimit: 24, autoSkip: true } },
-                    y: { beginAtZero: true }
+                    x: {
+                        ticks: { maxTicksLimit: 24, autoSkip: true, color: '#9ca3af' },
+                        grid: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { color: '#9ca3af' }
+                    }
                 }
             }
         });

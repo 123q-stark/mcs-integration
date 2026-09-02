@@ -45,17 +45,35 @@ class DeviceRuntimeService:
             repo.add_many(records)
             # with 块结束自动 commit，Session 关闭，锁释放
 
-    # ==================== 批量历史生成 ====================
+    # ==================== P0-02: 清空遥测历史 ====================
+
+    def _clear_telemetry(self) -> None:
+        """
+        P0-02: 清空所有遥测历史（Replace 模式用）
+        """
+        from app.repositories.device_telemetry_repository import DeviceTelemetryRepository
+
+        with self.database.session() as db:
+            repo = DeviceTelemetryRepository(db)
+            repo.clear_runtime_history()
+
+    # ==================== 批量历史生成（P0-02 Replace 模式） ====================
 
     def generate_history(self, days: int = 30, seed: int = 2026) -> Dict[str, Any]:
         """
         快速生成历史数据（A-11）
+        P0-02: Replace 模式，每次生成前清空所有历史
         """
         start_time = time.time()
 
+        # P0-02: 清空所有历史（Replace 模式）
+        self._clear_telemetry()
+
+        # 重置 Simulator（固定种子）
         self.simulator.reset(seed=seed)
+
+        # P0-03: 固定仿真起始时间（与 Simulator 的 simulated_hour=6.0 对齐）
         sim_time = datetime(2026, 1, 1, 6, 0, 0)
-        self._save_telemetry([])  # 清空历史
 
         total_steps = days * 96
         all_records: List[DeviceTelemetry] = []
@@ -78,6 +96,8 @@ class DeviceRuntimeService:
                 target = 0.0
 
             self.simulator.step_with_control(storage_power_target=target)
+
+            # P0-03: 使用仿真时间戳
             sim_timestamp = sim_time
             sim_time += timedelta(minutes=15)
 
@@ -97,7 +117,7 @@ class DeviceRuntimeService:
                         enabled=dev.enabled,
                         status=dev.status,
                         quality=dev.quality or "good",
-                        created_at=sim_timestamp,
+                        created_at=sim_timestamp,  # P0-03: 仿真时间
                     )
                 )
 
@@ -134,7 +154,7 @@ class DeviceRuntimeService:
                 return dev
         return None
 
-    # ==================== A-08: 执行 ControlDecision ====================
+    # ==================== A-08: 执行 ControlDecision（P0-03 统一时间） ====================
 
     def execute(self, decision) -> Dict[str, Any]:
         try:
@@ -158,6 +178,9 @@ class DeviceRuntimeService:
             after_state = self.simulator.get_state_without_advance()
             actual_power = after_state.storage_power
 
+            # P0-03: 获取仿真时间戳
+            sim_timestamp = self.simulator.get_current_timestamp()
+
             devices = self.simulator.get_all_devices_state()
             records = []
             for dev in devices:
@@ -175,10 +198,10 @@ class DeviceRuntimeService:
                         enabled=dev.enabled,
                         status=dev.status,
                         quality=dev.quality or "good",
+                        created_at=sim_timestamp,  # P0-03: 仿真时间
                     )
                 )
 
-            # A-锁库修复: 使用短 Session 写入
             self._save_telemetry(records)
 
             return {
@@ -194,9 +217,19 @@ class DeviceRuntimeService:
                 "message": f"执行失败: {str(e)}",
             }
 
-    # ==================== A-P1-07: 手动控制 ====================
+    # ==================== A-P1-07: 手动控制（A-07 修复：不推进时间） ====================
 
     def manual_control(self, command) -> Dict[str, Any]:
+        """
+        手动控制充电桩（A-07 修复版）
+
+        文档要求：07-2 只有 run_cycle/step/generate_history 允许推进时间
+        手动控制不应推进时间，只改变充电桩状态并更新 Grid 和聚合状态。
+
+        修改说明：
+        - 原实现调用 step_with_control() 会推进时间（+15分钟）
+        - 现在使用 set_charger_enabled() 直接修改状态，不推进时间
+        """
         try:
             device_code = command.device_code
             cmd = command.command
@@ -219,11 +252,9 @@ class DeviceRuntimeService:
 
             if cmd == "start":
                 enabled = True
-                power_limit = None
                 status_msg = f"充电桩 {device_code} 已启动"
             elif cmd == "stop":
                 enabled = False
-                power_limit = None
                 status_msg = f"充电桩 {device_code} 已停止"
             elif cmd == "set_power":
                 enabled = True
@@ -237,7 +268,7 @@ class DeviceRuntimeService:
                         "enabled": False,
                         "status": "invalid_power",
                     }
-                status_msg = f"充电桩 {device_code} 功率上限设置为 {power_limit}kW"
+                status_msg = f"充电桩 {device_code} 功率上限设置为 {power_limit}kW（当前版本功率限制暂不生效）"
             else:
                 return {
                     "success": False,
@@ -248,16 +279,15 @@ class DeviceRuntimeService:
                     "status": "unknown_command",
                 }
 
-            charger_mods = [{
-                "device_code": device_code,
-                "enabled": enabled,
-                "power_limit_kw": power_limit,
-            }]
-            self.simulator.step_with_control(
-                storage_power_target=0.0,
-                charger_targets=charger_mods,
-            )
+            # ===== A-07 修复：直接设置充电桩状态，不推进时间 =====
+            # set_charger_enabled 内部已调用 _update_grid() 和 _update_aggregate_state()
+            self.simulator.set_charger_enabled(device_code, enabled)
+            # ======================================================
 
+            # 获取当前仿真时间戳（同一时刻，不推进时间）
+            sim_timestamp = self.simulator.get_current_timestamp()
+
+            # 保存遥测记录（所有 12 个设备在同一时刻的状态）
             devices = self.simulator.get_all_devices_state()
             records = []
             for dev in devices:
@@ -275,12 +305,13 @@ class DeviceRuntimeService:
                         enabled=dev.enabled,
                         status=dev.status,
                         quality=dev.quality or "good",
+                        created_at=sim_timestamp,  # 同一时刻，不推进时间
                     )
                 )
 
-            # A-锁库修复: 使用短 Session 写入
             self._save_telemetry(records)
 
+            # 获取更新后的充电桩状态
             after_charger = None
             for charger in self.simulator.get_chargers():
                 if charger.device_code == device_code:

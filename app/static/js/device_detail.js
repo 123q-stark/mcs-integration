@@ -271,10 +271,17 @@ function renderHistory(data, deviceType) {
     canvas.style.display = 'block';
     noData.style.display = 'none';
 
+    // =============================================================
+    // ✅ 修改：X轴标签显示完整24小时，每小时一个标签（共24个）
+    // 文档要求：24h功率曲线显示完整的24小时
+    // =============================================================
+    // ✅ 统一只显示时间 HH:MM，不显示日期
+    // 原因：避免 X 轴显示 1.30 等日期，保持与页面"更新时间"一致
     const labels = data.data.map(d => {
-        const date = new Date(d.time);
-        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    });
+    const date = new Date(d.time);
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+});
+
     const powers = data.data.map(d => d.power_kw);
 
     if (chartInstance) {
@@ -283,6 +290,25 @@ function renderHistory(data, deviceType) {
 
     const ctx = canvas.getContext('2d');
     const isBattery = (deviceType === 'battery' || deviceType === 'storage');
+
+    // =============================================================
+    // ✅ 修改：根据设备类型动态设置Y轴最大值的计算方式
+    // - PV：根据数据最大值自动调整（+20%余量），至少显示到150
+    // - Charger：根据数据最大值自动调整（+20%余量）
+    // - Battery：功率用自动，SOC固定0-100
+    // - Grid：根据数据最大值自动调整（+20%余量）
+    // =============================================================
+
+    function getYMax(values, defaultMax) {
+        const maxVal = Math.max(...values, 0);
+        // 如果最大值小于1，使用默认值
+        if (maxVal < 1) return defaultMax || 50;
+        // 向上取整到10的倍数，并加20%余量
+        const rounded = Math.ceil(maxVal / 10) * 10;
+        return Math.max(rounded + Math.ceil(rounded * 0.2), 10);
+    }
+
+    const yMax = getYMax(powers, 50);
 
     if (isBattery) {
         // A-P1-04: Battery 设备同时显示功率和 SOC（双 Y 轴）
@@ -300,8 +326,9 @@ function renderHistory(data, deviceType) {
                         backgroundColor: 'rgba(79, 140, 247, 0.08)',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 1.5,
-                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        borderWidth: 2.5,
                         yAxisID: 'y'
                     },
                     {
@@ -311,8 +338,9 @@ function renderHistory(data, deviceType) {
                         backgroundColor: 'rgba(16, 185, 129, 0.08)',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 1.5,
-                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        borderWidth: 2.5,
                         yAxisID: 'y1'
                     }
                 ]
@@ -320,10 +348,28 @@ function renderHistory(data, deviceType) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
                     legend: {
                         display: true,
                         labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        titleColor: '#1a2332',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toFixed(2);
+                            }
+                        }
                     }
                 },
                 scales: {
@@ -356,10 +402,14 @@ function renderHistory(data, deviceType) {
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                        ticks: {
+                            font: { size: 9 },
+                            maxTicksLimit: 24,
+                            autoSkip: true,
+                            maxRotation: 0
+                        }
                     }
-                },
-                interaction: { intersect: false, mode: 'index' }
+                }
             }
         });
     } else {
@@ -375,29 +425,55 @@ function renderHistory(data, deviceType) {
                     backgroundColor: 'rgba(79, 140, 247, 0.08)',
                     fill: true,
                     tension: 0.3,
-                    pointRadius: 1.5,
-                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    borderWidth: 2.5,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 plugins: {
-                    legend: { display: true, labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+                    legend: {
+                        display: true,
+                        labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        titleColor: '#1a2332',
+                        bodyColor: '#4b5563',
+                        borderColor: '#e5e7eb',
+                        borderWidth: 1,
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' kW';
+                            }
+                        }
+                    }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        max: 120,
+                        max: yMax,
                         grid: { color: 'rgba(0,0,0,0.04)' },
                         ticks: { font: { size: 10 } }
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { font: { size: 9 }, maxTicksLimit: 12 }
+                        ticks: {
+                            font: { size: 9 },
+                            maxTicksLimit: 24,
+                            autoSkip: true,
+                            maxRotation: 0
+                        }
                     }
-                },
-                interaction: { intersect: false, mode: 'index' }
+                }
             }
         });
     }
