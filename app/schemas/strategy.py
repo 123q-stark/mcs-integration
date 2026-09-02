@@ -4,6 +4,7 @@
 """
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Optional
 
 
 # ============ 策略配置 Schema ============
@@ -17,12 +18,12 @@ class StrategyConfigResponse(BaseModel):
     charge_power_kw: float
     discharge_power_kw: float
     is_active: bool
-    
+
     # ===== 新增字段（B-01） =====
     requested_mode: str
     backup_soc_target: float
     # ============================
-    
+
     created_at: datetime
     updated_at: datetime
 
@@ -36,7 +37,7 @@ class StrategyConfigUpdate(BaseModel):
     soc_max: float = Field(..., ge=0, le=100)
     charge_power_kw: float = Field(..., gt=0, le=10)
     discharge_power_kw: float = Field(..., gt=0, le=10)
-    
+
     # ===== 新增字段（B-01） =====
     requested_mode: str = Field(..., description="请求模式: AUTO/PV_PRIORITY/ECONOMIC_SCHEDULE/GRID_BACKUP/SAFE")
     backup_soc_target: float = Field(..., ge=0, le=100, description="备用SOC目标")
@@ -88,25 +89,6 @@ class StrategyPreviewResponse(BaseModel):
     message: str = Field(..., description="策略判断说明")
     created_at: datetime = Field(..., description="决策时间")
 
-# ============ 电价配置 Schema ============
-
-class PriceConfigResponse(BaseModel):
-    """电价配置响应模型"""
-    id: int
-    valley_price: float
-    flat_price: float
-    peak_price: float
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class PriceConfigUpdate(BaseModel):
-    """电价配置更新请求模型"""
-    valley_price: float | None = Field(None, ge=0, description="谷价 (CNY/kWh)")
-    flat_price: float | None = Field(None, ge=0, description="平价 (CNY/kWh)")
-    peak_price: float | None = Field(None, ge=0, description="峰价 (CNY/kWh)")
-
 
 # ============ 电价配置 Schema ============
 
@@ -147,17 +129,40 @@ class GridStrategyConfigUpdate(BaseModel):
     max_export_power_kw: float | None = Field(None, gt=0, description="最大上网功率 (kW)")
 
 
-# ============ 模式配置 Schema（B-06） ============
+# ============ 模式配置 Schema（B-06 + P1-01） ============
 
 class ModeResponse(BaseModel):
     """模式响应模型"""
     requested_mode: str
-    effective_mode: str
-    updated_at: datetime
+    effective_mode: str | None = None  # P1-04: 可为 None（从未运行）
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
+# ===== P1-01 修复：ModeUpdate 添加枚举校验 =====
 class ModeUpdate(BaseModel):
     """模式更新请求模型"""
-    requested_mode: str = Field(..., description="请求模式: AUTO/PV_PRIORITY/ECONOMIC_SCHEDULE/GRID_BACKUP/SAFE")
+    requested_mode: str = Field(..., description="请求模式")
+
+    @field_validator("requested_mode")
+    @classmethod
+    def validate_requested_mode(cls, v):
+        """P1-01: 校验 requested_mode 必须是有效枚举值"""
+        valid_modes = ["AUTO", "PV_PRIORITY", "ECONOMIC_SCHEDULE", "GRID_BACKUP", "SAFE"]
+        if v not in valid_modes:
+            raise ValueError(f"requested_mode must be one of {valid_modes}, got {v}")
+        return v
+
+
+# ============ P1-01 新增：设备策略配置更新 Schema ============
+
+class StrategyDeviceConfigUpdate(BaseModel):
+    """
+    设备策略配置更新请求模型
+    P1-01: 禁止裸 dict，使用 Pydantic 校验
+    """
+    participate_in_strategy: Optional[bool] = Field(None, description="是否参与策略")
+    allow_strategy_control: Optional[bool] = Field(None, description="是否允许策略控制")
+    strategy_power_limit_kw: Optional[float] = Field(None, ge=0, description="策略功率上限 (kW)")
+    priority: Optional[int] = Field(None, ge=1, le=5, description="优先级 (1~5)")

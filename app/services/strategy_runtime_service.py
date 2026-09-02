@@ -91,35 +91,58 @@ class StrategyRuntimeService:
             if requested_mode in ["ECONOMIC_SCHEDULE", "AUTO", "GRID_BACKUP"]:
                 logger.info("进入优化分支（requested_mode 符合条件）")
                 try:
-                    # 获取预测
+                    # =============================================================
+                    # ✅ 修复：获取预测时传入当前仿真时间 state.timestamp
+                    # 修改前：get_load_forecast(history_days=30) 使用系统时间
+                    # 修改后：传入 state.timestamp，预测与仿真时间对齐
+                    # =============================================================
                     logger.info("开始获取负荷预测...")
-                    load_forecast = self.bridge.get_load_forecast(history_days=30)
+                    load_forecast = self.bridge.get_load_forecast(
+                        history_days=30,
+                        current_timestamp=state.timestamp  # ✅ 传入仿真时间
+                    )
                     self.load_forecast = load_forecast
                     if load_forecast:
-                        logger.info(f"负荷预测获取成功，点数={len(load_forecast.points)}，模型={load_forecast.model_name}")
+                        logger.info(f"负荷预测获取成功，available={getattr(load_forecast, 'available', False)}，点数={len(load_forecast.points)}，模型={load_forecast.model_name}")
                     else:
                         logger.warning("负荷预测返回 None")
 
                     logger.info("开始获取 PV 预测...")
-                    pv_forecast = self.bridge.get_pv_forecast(history_days=30)
+                    pv_forecast = self.bridge.get_pv_forecast(
+                        history_days=30,
+                        current_timestamp=state.timestamp  # ✅ 传入仿真时间
+                    )
                     self.pv_forecast = pv_forecast
                     if pv_forecast:
-                        logger.info(f"PV 预测获取成功，点数={len(pv_forecast.points)}，模型={pv_forecast.model_name}")
+                        logger.info(f"PV 预测获取成功，available={getattr(pv_forecast, 'available', False)}，点数={len(pv_forecast.points)}，模型={pv_forecast.model_name}")
                     else:
                         logger.warning("PV 预测返回 None")
 
-                    # 如果有预测数据，尝试优化
-                    if load_forecast and load_forecast.points and pv_forecast and pv_forecast.points:
+                    # ===== P0-01 修复：检查 available 而不是只检查 points 长度 =====
+                    load_available = (load_forecast is not None and
+                                      getattr(load_forecast, 'available', False) and
+                                      len(load_forecast.points) == 96)
+                    pv_available = (pv_forecast is not None and
+                                    getattr(pv_forecast, 'available', False) and
+                                    len(pv_forecast.points) == 96)
+
+                    if load_available and pv_available:
                         logger.info(f"预测数据有效，开始获取价格序列...")
                         price_series = self._get_price_series()
                         logger.info(f"价格序列长度={len(price_series)}")
 
                         logger.info("开始调用 MILP 优化...")
+                        # =============================================================
+                        # ✅ 修改：传入当前仿真时间 state.timestamp（符合 07-2 规范）
+                        # 修改前：未传入 current_timestamp，MILP 使用 datetime.now()
+                        # 修改后：传入 state.timestamp，调度计划与仿真时间对齐
+                        # =============================================================
                         optimization = self.bridge.get_optimization(
                             load_forecast=load_forecast,
                             pv_forecast=pv_forecast,
                             price_series=price_series,
                             current_soc=state.storage_soc,
+                            current_timestamp=state.timestamp,  # ✅ 传入仿真时间
                         )
                         self.optimization = optimization
 
@@ -129,11 +152,18 @@ class StrategyRuntimeService:
                                 effective_mode = "ECONOMIC_SCHEDULE"
                                 logger.info("=== 使用 MILP 优化调度 ===")
                             else:
+                                # ===== P0-01 修复：MILP 失败时标记 fallback =====
+                                fallback_used = True
                                 logger.warning("MILP 优化失败或返回空结果，将回退到 FixedRule")
                         else:
+                            fallback_used = True
                             logger.error("optimization 为 None")
                     else:
-                        logger.warning(f"预测数据无效: load_forecast={bool(load_forecast)}, load_points={len(load_forecast.points) if load_forecast else 0}, pv_forecast={bool(pv_forecast)}, pv_points={len(pv_forecast.points) if pv_forecast else 0}")
+                        # ===== P0-01 修复：预测不可用时标记 fallback =====
+                        fallback_used = True
+                        load_msg = f"load_available={load_available}, load_points={len(load_forecast.points) if load_forecast else 0}"
+                        pv_msg = f"pv_available={pv_available}, pv_points={len(pv_forecast.points) if pv_forecast else 0}"
+                        logger.warning(f"预测数据不可用: {load_msg}, {pv_msg}")
 
                 except Exception as e:
                     import traceback
@@ -148,7 +178,7 @@ class StrategyRuntimeService:
                 auto_context = {
                     "current_soc": state.storage_soc,
                     "backup_soc_target": config.backup_soc_target,
-                    "forecast_available": load_forecast is not None and len(load_forecast.points) > 0,
+                    "forecast_available": load_forecast is not None and getattr(load_forecast, 'available', False) and len(load_forecast.points) > 0,
                     "schedule_available": optimization is not None and optimization.success,
                     "any_device_error": False,  # 可扩展
                     "current_price_level": self._get_current_price_level(state.simulated_hour),

@@ -10,6 +10,20 @@ const onlineCountEl = document.getElementById('onlineCount');
 const offlineCountEl = document.getElementById('offlineCount');
 const refreshButton = document.getElementById('refreshButton');
 
+// ==================== 模式名称映射 ====================
+
+const MODE_DISPLAY = {
+    'AUTO': '自动模式',
+    'PV_PRIORITY': '光伏优先',
+    'ECONOMIC_SCHEDULE': '经济调度',
+    'GRID_BACKUP': '电网备用',
+    'SAFE': '安全模式'
+};
+
+function getModeDisplay(mode) {
+    return MODE_DISPLAY[mode] || mode || '--';
+}
+
 // ==================== 工具函数 ====================
 
 function showToast(message, type = 'info') {
@@ -188,8 +202,9 @@ async function fetchSystemSummary() {
         const runtimeResp = await fetch('/api/strategies/runtime');
         if (runtimeResp.ok) {
             const runtime = await runtimeResp.json();
-            document.getElementById('requestedMode').textContent = runtime.requested_mode || '--';
-            document.getElementById('effectiveMode').textContent = `生效: ${runtime.effective_mode || '--'}`;
+            // ✅ 修改：使用中文显示模式名称
+            document.getElementById('requestedMode').textContent = getModeDisplay(runtime.requested_mode);
+            document.getElementById('effectiveMode').textContent = `生效: ${getModeDisplay(runtime.effective_mode)}`;
         }
     } catch (e) {
         console.warn('获取策略状态失败:', e);
