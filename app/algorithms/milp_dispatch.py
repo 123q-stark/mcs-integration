@@ -11,7 +11,7 @@ MILP 储能调度优化器（使用 scipy.optimize.milp + HiGHS）。
 """
 import numpy as np
 from scipy.optimize import milp, LinearConstraint, Bounds
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from .interfaces import EnergyOptimizer
@@ -36,6 +36,8 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             max_import = request['max_import_power']
             allow_export = request.get('allow_export', False)
             max_export = request.get('max_export_power', 0.0)
+            # ===== 获取当前仿真时间（07-2 要求使用仿真时间） =====
+            current_timestamp = request.get('current_timestamp', datetime.now())
 
             n = 96
             dt = self.time_step
@@ -54,8 +56,6 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             # 峰值惩罚：小权重
             c[peak_idx] = 0.001
             # ===== T06 修复：grid_export 添加微小惩罚，防止滥用售电变量 =====
-            # 如果允许售电，grid_export 有微小成本，使优化器在满足平衡时
-            # 优先使用储能（p_storage）而非售电，从而使电价影响储能调度。
             c[num_p+num_g:num_p+num_g+num_e] = 0.001
 
             A_eq = []
@@ -145,7 +145,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             if not result.success:
                 return OptimizationResult(
                     optimizer_name="MILP",
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(),
                     success=False,
                     objective_value=None,
                     schedule=[],
@@ -155,13 +155,23 @@ class MilpBatteryOptimizer(EnergyOptimizer):
             p_storage_opt = result.x[:n]
             grid_import_opt = result.x[num_p:num_p+n]
 
+            # =============================================================
+            # ✅ 修改：生成 96 个递增 15 分钟的时间戳（符合 07-2 规范）
+            # 修改前：全部使用 datetime.now() → X 轴全显示同一时间
+            # 修改后：基于 current_timestamp 依次递增 15 分钟
+            # =============================================================
+            timestamps = [
+                current_timestamp + timedelta(minutes=15 * i)
+                for i in range(n)
+            ]
+
             schedule = []
             soc = soc0
             for t in range(n):
                 soc = soc0 + np.sum(-p_storage_opt[:t+1] * dt / cap * 100.0)
                 soc = max(soc_min - 0.01, min(soc_max + 0.01, soc))
                 schedule.append(SchedulePoint(
-                    timestamp=datetime.utcnow(),
+                    timestamp=timestamps[t],  # ✅ 每个点递增 15 分钟
                     storage_power_target_kw=float(p_storage_opt[t]),
                     predicted_soc=float(soc)
                 ))
@@ -170,7 +180,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
 
             return OptimizationResult(
                 optimizer_name="MILP",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(),
                 success=True,
                 objective_value=float(objective),
                 schedule=schedule,
@@ -180,7 +190,7 @@ class MilpBatteryOptimizer(EnergyOptimizer):
         except Exception as e:
             return OptimizationResult(
                 optimizer_name="MILP",
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(),
                 success=False,
                 objective_value=None,
                 schedule=[],

@@ -12,6 +12,8 @@ class ForecastPoint(BaseModel):
 
 
 class ForecastResult(BaseModel):
+    # P0-01: 新增 available 字段，表示预测是否有效
+    available: bool = True
     model_name: str
     target: str  # 'load' or 'pv'
     created_at: datetime
@@ -19,7 +21,7 @@ class ForecastResult(BaseModel):
     points: List[ForecastPoint]
     mae: Optional[float] = None
     rmse: Optional[float] = None
-
+    message: Optional[str] = None  # P0-01: 当 available=False 时说明原因
 
 class SchedulePoint(BaseModel):
     timestamp: datetime

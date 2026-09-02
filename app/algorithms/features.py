@@ -25,12 +25,21 @@ def build_load_features(df: pd.DataFrame) -> pd.DataFrame:
     df['lag_4'] = df['load_kw'].shift(4)   # 1小时前
     df['lag_96'] = df['load_kw'].shift(96) # 1天前
 
-    # 滚动统计
-    df['rolling_mean_4'] = df['load_kw'].rolling(4, min_periods=1).mean()
-    df['rolling_mean_96'] = df['load_kw'].rolling(96, min_periods=1).mean()
+    # P0-04 修复: 滚动统计使用 shift(1) 确保不包含当前目标值
+    df['rolling_mean_4'] = (
+        df['load_kw']
+        .shift(1)
+        .rolling(4, min_periods=1)
+        .mean()
+    )
+    df['rolling_mean_96'] = (
+        df['load_kw']
+        .shift(1)
+        .rolling(96, min_periods=1)
+        .mean()
+    )
 
     # 删除含 NaN 的行（前几行）
-    # 对于预测时，我们不会删除，而是用前向填充，但这里作为训练，可以删掉
     df = df.dropna()
     return df
 
@@ -51,8 +60,14 @@ def build_pv_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 滞后
     df['lag_96'] = df['pv_kw'].shift(96)
-    df['rolling_mean_96'] = df['pv_kw'].rolling(96, min_periods=1).mean()
 
-    # 如果有辐照度列，也可以加入，但文档允许只用时间+历史PV
+    # P0-04 修复: 滚动统计使用 shift(1) 确保不包含当前目标值
+    df['rolling_mean_96'] = (
+        df['pv_kw']
+        .shift(1)
+        .rolling(96, min_periods=1)
+        .mean()
+    )
+
     df = df.dropna()
     return df

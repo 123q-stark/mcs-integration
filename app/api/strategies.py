@@ -3,6 +3,7 @@
 提供策略配置的查询、更新和预览接口
 """
 import logging
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
@@ -20,6 +21,7 @@ from app.schemas.strategy import (
     GridStrategyConfigUpdate,
     ModeResponse,
     ModeUpdate,
+    StrategyDeviceConfigUpdate,  # P1-01 新增
 )
 from app.services.strategy_service import StrategyService
 from app.services.strategy_runtime_service import StrategyRuntimeService
@@ -119,7 +121,7 @@ async def update_grid_config(request: Request, update_data: GridStrategyConfigUp
         raise HTTPException(status_code=500, detail="电网策略配置保存失败")
 
 
-# ============ 设备策略配置 API（B-02） ============
+# ============ 设备策略配置 API（B-02 + P1-01） ============
 
 @router.get("/device-configs")
 async def get_device_configs(request: Request):
@@ -156,12 +158,27 @@ async def get_device_config(request: Request, device_code: str):
         }
 
 
+# ===== P1-01 修复：使用 StrategyDeviceConfigUpdate Schema 替代裸 dict =====
 @router.put("/device-configs/{device_code}")
-async def update_device_config(request: Request, device_code: str, update_data: dict):
+async def update_device_config(
+    request: Request,
+    device_code: str,
+    update_data: StrategyDeviceConfigUpdate,  # P1-01: 使用 Schema
+):
+    """
+    更新单个设备的策略配置（P1-01：使用 Pydantic 校验）
+    支持部分更新，可传入以下字段：
+        participate_in_strategy (bool)
+        allow_strategy_control (bool)
+        strategy_power_limit_kw (float, optional)
+        priority (int)
+    """
     database = request.app.state.database
     with database.session() as db:
         repo = StrategyDeviceRepository(db)
-        config = repo.update(device_code, update_data)
+        # 过滤掉 None 值，只更新传入的字段
+        update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+        config = repo.update(device_code, update_dict)
         if config is None:
             raise HTTPException(status_code=404, detail="设备策略配置不存在")
         return {
@@ -173,26 +190,43 @@ async def update_device_config(request: Request, device_code: str, update_data: 
         }
 
 
-# ============ 模式切换 API（B-06） ============
+# ============ 模式切换 API（B-06 + P1-04） ============
 
 @router.get("/mode", response_model=ModeResponse)
 async def get_mode(request: Request):
+    """
+    获取当前模式（P1-04 修复：effective_mode 来自最新策略运行记录）
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.repositories.strategy_repository import StrategyRepository
+        from app.models.strategy_run import StrategyRunModel
+
         repo = StrategyRepository(db)
         config = repo.get_active_config()
         if config is None:
             raise HTTPException(status_code=404, detail="未找到策略配置")
+
+        # P1-04: effective_mode 来自最新 strategy_run
+        latest_run = db.query(StrategyRunModel).order_by(
+            StrategyRunModel.created_at.desc()
+        ).first()
+
+        effective_mode = latest_run.effective_mode if latest_run else None
+        updated_at = latest_run.created_at if latest_run else config.updated_at
+
         return ModeResponse(
             requested_mode=config.requested_mode,
-            effective_mode=config.requested_mode,
-            updated_at=config.updated_at,
+            effective_mode=effective_mode,
+            updated_at=updated_at,
         )
 
 
 @router.put("/mode", response_model=ModeResponse)
 async def update_mode(request: Request, update_data: ModeUpdate):
+    """
+    更新请求模式（P1-01：ModeUpdate 已有枚举校验）
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.repositories.strategy_repository import StrategyRepository
@@ -203,9 +237,17 @@ async def update_mode(request: Request, update_data: ModeUpdate):
         config.requested_mode = update_data.requested_mode
         db.commit()
         db.refresh(config)
+
+        # 获取最新运行记录（保持 effective_mode 不变）
+        from app.models.strategy_run import StrategyRunModel
+        latest_run = db.query(StrategyRunModel).order_by(
+            StrategyRunModel.created_at.desc()
+        ).first()
+        effective_mode = latest_run.effective_mode if latest_run else None
+
         return ModeResponse(
             requested_mode=config.requested_mode,
-            effective_mode=config.requested_mode,
+            effective_mode=effective_mode,
             updated_at=config.updated_at,
         )
 
@@ -263,11 +305,9 @@ async def get_runtime_status(request: Request):
         from app.models.strategy_run import StrategyRunModel
         from app.repositories.strategy_repository import StrategyRepository
 
-        # 获取当前策略配置（包含 requested_mode）
         repo = StrategyRepository(db)
         config = repo.get_active_config()
 
-        # 获取最新的一条运行记录
         latest_run = db.query(StrategyRunModel).order_by(
             StrategyRunModel.created_at.desc()
         ).first()
@@ -289,11 +329,14 @@ async def get_runtime_status(request: Request):
         }
 
 
-# ============ 预测数据 API（v1.3） ============
+# ============ 预测数据 API（v1.3 + P1-05 修复） ============
 
 @router.get("/forecast/load")
 async def get_load_forecast(request: Request):
-    """获取最新的负荷预测（96 点）"""
+    """
+    获取最新的负荷预测（96 点）
+    P1-05: 无真实数据时返回 available=False，不返回 Simulated 假数据
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
@@ -304,7 +347,8 @@ async def get_load_forecast(request: Request):
         if record and record.load_forecast_json:
             points = json.loads(record.load_forecast_json)
             return {
-                "model_name": "XGBoost",
+                "available": True,  # P0-01
+                "model_name": record.forecast_model_load or "XGBoost",
                 "target": "load",
                 "created_at": record.created_at.isoformat(),
                 "step_minutes": 15,
@@ -312,31 +356,27 @@ async def get_load_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 模拟数据兜底
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    points = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        base = 50 + 20 * math.sin((hour - 8) / 24 * 2 * math.pi)
-        val = max(10, base + 5 * math.sin(i/96 * 2 * math.pi))
-        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+
+    # P1-05: 无真实数据时返回空，不返回 Simulated 假数据
     return {
-        "model_name": "Simulated",
+        "available": False,
+        "model_name": "Unavailable",
         "target": "load",
         "created_at": datetime.now().isoformat(),
         "step_minutes": 15,
-        "points": points,
+        "points": [],
         "mae": None,
-        "rmse": None
+        "rmse": None,
+        "message": "No valid load forecast found"
     }
 
 
 @router.get("/forecast/pv")
 async def get_pv_forecast(request: Request):
-    """获取最新的 PV 预测（96 点）"""
+    """
+    获取最新的 PV 预测（96 点）
+    P1-05: 无真实数据时返回 available=False，不返回 Simulated 假数据
+    """
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
@@ -347,7 +387,8 @@ async def get_pv_forecast(request: Request):
         if record and record.pv_forecast_json:
             points = json.loads(record.pv_forecast_json)
             return {
-                "model_name": "XGBoost",
+                "available": True,
+                "model_name": record.forecast_model_pv or "XGBoost",
                 "target": "pv",
                 "created_at": record.created_at.isoformat(),
                 "step_minutes": 15,
@@ -355,77 +396,54 @@ async def get_pv_forecast(request: Request):
                 "mae": None,
                 "rmse": None
             }
-    # 模拟数据兜底
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    points = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        if 6 <= hour <= 18:
-            pos = (hour - 6) / 12
-            val = 80 * math.sin(math.pi * pos)
-        else:
-            val = 0
-        points.append({"timestamp": dt.isoformat(), "value": round(val, 2)})
+
+    # P1-05: 无真实数据时返回空，不返回 Simulated 假数据
     return {
-        "model_name": "Simulated",
+        "available": False,
+        "model_name": "Unavailable",
         "target": "pv",
         "created_at": datetime.now().isoformat(),
         "step_minutes": 15,
-        "points": points,
+        "points": [],
         "mae": None,
-        "rmse": None
+        "rmse": None,
+        "message": "No valid PV forecast found"
     }
 
 
-# ============ 调度计划 API（v1.4） ============
+# ============ 调度计划 API（v1.4 + P1-05 修复） ============
 
 @router.get("/schedule")
 async def get_schedule(request: Request):
     """
     获取最新的储能调度计划（96 点）
+    P1-05: 无真实数据时返回 available=False，不返回 Simulated 假数据
     """
     database = request.app.state.database
     with database.session() as db:
         from app.models.strategy_run import StrategyRunModel
         import json
-        
+
         record = db.query(StrategyRunModel).filter(
             StrategyRunModel.schedule_json.isnot(None)
         ).order_by(StrategyRunModel.created_at.desc()).first()
-        
+
         if record and record.schedule_json:
             schedule_data = json.loads(record.schedule_json)
             return {
+                "available": True,
                 "created_at": record.created_at.isoformat(),
                 "schedule": schedule_data,
                 "source": record.source,
                 "effective_mode": record.effective_mode,
             }
-    
-    # 模拟数据
-    from datetime import datetime, timedelta
-    import math
-    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    schedule = []
-    for i in range(96):
-        dt = now + timedelta(minutes=15*i)
-        hour = dt.hour
-        if 6 <= hour <= 18:
-            power = 5 * math.sin((hour - 6) / 12 * math.pi)
-        else:
-            power = -3
-        soc = 50 + 10 * math.sin(i / 96 * 2 * math.pi)
-        schedule.append({
-            "timestamp": dt.isoformat(),
-            "power": round(power, 2),
-            "soc": round(soc, 1)
-        })
+
+    # P1-05: 无真实数据时返回空，不返回 Simulated 假数据
     return {
+        "available": False,
         "created_at": datetime.now().isoformat(),
-        "schedule": schedule,
-        "source": "simulated",
-        "effective_mode": "PV_PRIORITY",
+        "schedule": [],
+        "source": None,
+        "effective_mode": None,
+        "message": "No valid schedule found"
     }
